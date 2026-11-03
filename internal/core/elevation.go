@@ -24,8 +24,145 @@ func FindElevationTool() string {
 	return ""
 }
 
-// RunElevated executes a command with root privileges. If already root, it runs directly.
-// Otherwise, it invokes pkexec (GUI polkit agent / terminal) or sudo.
+// ElevatedAction represents a discrete privileged command to be executed in a single root batch.
+type ElevatedAction struct {
+	ID          string   `json:"id"`
+	Description string   `json:"description"`
+	Command     string   `json:"command"`
+	Args        []string `json:"args"`
+}
+
+// ExecuteBatch runs multiple privileged actions under a SINGLE pkexec/sudo elevation invocation.
+// This guarantees that the user is prompted for their password at most once for all privileged actions combined.
+func ExecuteBatch(ctx context.Context, actions []ElevatedAction) (map[string]error, error) {
+	results := make(map[string]error)
+	if len(actions) == 0 {
+		return results, nil
+	}
+
+	// If already running with root privileges, execute directly without elevation helper
+	if IsPrivileged() {
+		for _, act := range actions {
+			cmd := exec.CommandContext(ctx, act.Command, act.Args...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				results[act.ID] = fmt.Errorf("%s failed: %w (output: %s)", act.Command, err, strings.TrimSpace(string(out)))
+			} else {
+				results[act.ID] = nil
+			}
+		}
+		return results, nil
+	}
+
+	tool := FindElevationTool()
+	if tool == "" {
+		return results, fmt.Errorf("root privileges required, but neither pkexec nor sudo is available")
+	}
+
+	// Create a single temporary script file containing all privileged actions
+	tmpFile, err := os.CreateTemp("", "sweep-elevated-*.sh")
+	if err != nil {
+		return results, fmt.Errorf("failed to create temporary elevation script: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	var sb strings.Builder
+	sb.WriteString("#!/bin/sh\n")
+	sb.WriteString("# Sweep Automated Privileged Execution Script\n")
+
+	for _, act := range actions {
+		sb.WriteString(fmt.Sprintf("echo '===SWEEP_START:%s==='\n", act.ID))
+		var escapedArgs []string
+		for _, arg := range act.Args {
+			escapedArgs = append(escapedArgs, "'"+strings.ReplaceAll(arg, "'", "'\"'\"'")+"'")
+		}
+		sb.WriteString(fmt.Sprintf("%s %s\n", act.Command, strings.Join(escapedArgs, " ")))
+		sb.WriteString(fmt.Sprintf("echo '===SWEEP_EXIT:'$?':%s==='\n", act.ID))
+	}
+
+	if err := tmpFile.Chmod(0700); err != nil {
+		_ = tmpFile.Close()
+		return results, err
+	}
+	if _, err := tmpFile.WriteString(sb.String()); err != nil {
+		_ = tmpFile.Close()
+		return results, err
+	}
+	_ = tmpFile.Close()
+
+	// Execute via pkexec or sudo ONCE
+	base := strings.ToLower(tool)
+	var cmd *exec.Cmd
+	if strings.HasSuffix(base, "pkexec") {
+		cmd = exec.CommandContext(ctx, tool, "/bin/sh", tmpPath)
+	} else {
+		cmd = exec.CommandContext(ctx, tool, "/bin/sh", tmpPath)
+	}
+
+	combinedOut, execErr := cmd.CombinedOutput()
+	outputStr := string(combinedOut)
+
+	// If the entire tool failed (e.g., user dismissed polkit prompt)
+	if execErr != nil && !strings.Contains(outputStr, "===SWEEP_START:") {
+		trimmed := strings.TrimSpace(outputStr)
+		if trimmed != "" {
+			return results, fmt.Errorf("privilege elevation failed: %w (output: %s)", execErr, trimmed)
+		}
+		return results, fmt.Errorf("privilege elevation was canceled or failed: %w", execErr)
+	}
+
+	// Parse individual action results from output
+	lines := strings.Split(outputStr, "\n")
+	currentID := ""
+	var currentOutput []string
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "===SWEEP_START:") && strings.HasSuffix(line, "===") {
+			currentID = strings.TrimSuffix(strings.TrimPrefix(line, "===SWEEP_START:"), "===")
+			currentOutput = nil
+			continue
+		}
+		if strings.HasPrefix(line, "===SWEEP_EXIT:") && strings.HasSuffix(line, "===") {
+			parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(line, "===SWEEP_EXIT:"), "==="), ":")
+			if len(parts) == 2 {
+				exitCode := parts[0]
+				actionID := parts[1]
+				if exitCode == "0" {
+					results[actionID] = nil
+				} else {
+					outMsg := strings.TrimSpace(strings.Join(currentOutput, " "))
+					if outMsg != "" {
+						results[actionID] = fmt.Errorf("exit code %s: %s", exitCode, outMsg)
+					} else {
+						results[actionID] = fmt.Errorf("exit code %s", exitCode)
+					}
+				}
+			}
+			currentID = ""
+			continue
+		}
+		if currentID != "" {
+			currentOutput = append(currentOutput, line)
+		}
+	}
+
+	// For any action not reached (if script terminated early)
+	for _, act := range actions {
+		if _, ok := results[act.ID]; !ok {
+			if execErr != nil {
+				results[act.ID] = execErr
+			} else {
+				results[act.ID] = fmt.Errorf("action not executed")
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// RunElevated executes a single command with root privileges. If already root, it runs directly.
+// Otherwise, it invokes pkexec or sudo.
 func RunElevated(ctx context.Context, name string, args ...string) ([]byte, error) {
 	if IsPrivileged() {
 		return exec.CommandContext(ctx, name, args...).CombinedOutput()
@@ -43,7 +180,6 @@ func RunElevated(ctx context.Context, name string, args ...string) ([]byte, erro
 		pkArgs := append([]string{name}, args...)
 		cmd = exec.CommandContext(ctx, tool, pkArgs...)
 	} else {
-		// sudo
 		sudoArgs := append([]string{name}, args...)
 		cmd = exec.CommandContext(ctx, tool, sudoArgs...)
 	}
@@ -101,9 +237,16 @@ func RemoveElevated(ctx context.Context, paths ...string) error {
 
 	// Elevate to remove root-protected paths in a single batch
 	rmArgs := append([]string{"-rf", "--"}, failed...)
-	_, err := RunElevated(ctx, "rm", rmArgs...)
+	res, err := ExecuteBatch(ctx, []ElevatedAction{{
+		ID:      "remove_paths",
+		Command: "rm",
+		Args:    rmArgs,
+	}})
 	if err != nil {
 		return fmt.Errorf("elevated removal failed: %w", err)
+	}
+	if actErr := res["remove_paths"]; actErr != nil {
+		return fmt.Errorf("elevated removal failed: %w", actErr)
 	}
 
 	// Double-check verification
