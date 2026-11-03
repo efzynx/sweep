@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag name (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
 
 permissions:
   contents: write
@@ -54,12 +60,17 @@ jobs:
 
       - name: Build Release Binaries & Packages
         run: |
-          mkdir -p release
-          TAG_NAME=${GITHUB_REF#refs/tags/}
+          mkdir -p release staging
+          TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
+          CLEAN_VERSION="${TAG_NAME#v}"
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          echo "Building CLI binaries..."
+          echo "Installing nfpm packager..."
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+          export PATH="$(go env GOPATH)/bin:$PATH"
+
+          echo "Building CLI binaries for tag ${TAG_NAME}..."
           for ARCH in amd64 arm64; do
             echo "Building CLI for linux/${ARCH}..."
             CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build \
@@ -68,6 +79,15 @@ jobs:
             
             # Create CLI tarball
             tar -czf release/sweep-${TAG_NAME}-linux-${ARCH}.tar.gz -C release sweep-linux-${ARCH} -C ../ README.md LICENSE
+
+            # Generate .deb and .rpm for CLI
+            cp release/sweep-linux-${ARCH} staging/sweep
+            ARCH=${ARCH} VERSION=${CLEAN_VERSION} nfpm package --config build/package/nfpm-cli.yaml --packager deb --target release/
+            ARCH=${ARCH} VERSION=${CLEAN_VERSION} nfpm package --config build/package/nfpm-cli.yaml --packager rpm --target release/
+            if [ "${ARCH}" = "amd64" ]; then
+              ARCH=amd64 VERSION=${CLEAN_VERSION} nfpm package --config build/package/nfpm-cli.yaml --packager archlinux --target release/
+            fi
+            rm -f staging/sweep
           done
 
           echo "Building Desktop GUI binary (linux/amd64)..."
@@ -86,16 +106,29 @@ jobs:
           
           tar -czf release/sweep-gui-${TAG_NAME}-linux-amd64.tar.gz -C release "sweep-gui-${TAG_NAME}-linux-amd64"
 
+          # Generate .deb, .rpm, and .pkg.tar.zst for Desktop GUI
+          cp release/sweep-gui-linux-amd64 staging/sweep-gui
+          cp release/sweep-linux-amd64 staging/sweep
+          ARCH=amd64 VERSION=${CLEAN_VERSION} nfpm package --config build/package/nfpm-gui.yaml --packager deb --target release/
+          ARCH=amd64 VERSION=${CLEAN_VERSION} nfpm package --config build/package/nfpm-gui.yaml --packager rpm --target release/
+          ARCH=amd64 VERSION=${CLEAN_VERSION} nfpm package --config build/package/nfpm-gui.yaml --packager archlinux --target release/
+          rm -rf staging
+
           # Generate SHA256 checksums
           cd release
-          sha256sum sweep-*.tar.gz sweep-linux-* sweep-gui-linux-* > SHA256SUMS.txt
+          sha256sum sweep-* > SHA256SUMS.txt
           cd ..
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Sweep ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             release/*.tar.gz
+            release/*.deb
+            release/*.rpm
+            release/*.pkg.tar.zst
             release/sweep-linux-*
             release/sweep-gui-linux-*
             release/SHA256SUMS.txt

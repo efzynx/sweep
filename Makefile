@@ -23,8 +23,10 @@ LDFLAGS := -s -w \
 	-X main.BuildDate=$(BUILD_DATE)
 
 GO ?= go
+GOPATH ?= $(shell $(GO) env GOPATH)
+NFPM ?= $(shell command -v nfpm 2>/dev/null || (test -x "$(GOPATH)/bin/nfpm" && echo "$(GOPATH)/bin/nfpm") || echo "nfpm")
 
-.PHONY: all build build-gui build-all build-frontend test lint vet fmt fmt-check clean run cross-compile install uninstall validate-desktop help
+.PHONY: all build build-gui build-all build-frontend test lint vet fmt fmt-check clean run cross-compile package install uninstall validate-desktop help
 
 all: build
 
@@ -83,6 +85,25 @@ cross-compile:
 	GOOS=linux GOARCH=amd64 $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/sweep
 	GOOS=linux GOARCH=arm64 $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/sweep
 	@echo "Cross-compilation complete: $(BIN_DIR)/$(BINARY_NAME)-linux-amd64, $(BIN_DIR)/$(BINARY_NAME)-linux-arm64"
+
+## package: Build .deb, .rpm, and Arch packages using nfpm
+package: build-all
+	@if ! command -v $(NFPM) >/dev/null 2>&1 && [ ! -x "$(NFPM)" ]; then \
+		echo "nfpm not found. Run 'go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest' or add $(GOPATH)/bin to PATH."; \
+		exit 1; \
+	fi
+	@mkdir -p staging dist
+	@cp $(TARGET) staging/sweep
+	@cp $(GUI_TARGET) staging/sweep-gui
+	@ARCH=amd64 VERSION=$(shell echo "$(VERSION)" | sed 's/^v//') $(NFPM) package --config build/package/nfpm-cli.yaml --packager deb --target dist/
+	@ARCH=amd64 VERSION=$(shell echo "$(VERSION)" | sed 's/^v//') $(NFPM) package --config build/package/nfpm-cli.yaml --packager rpm --target dist/
+	@ARCH=amd64 VERSION=$(shell echo "$(VERSION)" | sed 's/^v//') $(NFPM) package --config build/package/nfpm-cli.yaml --packager archlinux --target dist/
+	@ARCH=amd64 VERSION=$(shell echo "$(VERSION)" | sed 's/^v//') $(NFPM) package --config build/package/nfpm-gui.yaml --packager deb --target dist/
+	@ARCH=amd64 VERSION=$(shell echo "$(VERSION)" | sed 's/^v//') $(NFPM) package --config build/package/nfpm-gui.yaml --packager rpm --target dist/
+	@ARCH=amd64 VERSION=$(shell echo "$(VERSION)" | sed 's/^v//') $(NFPM) package --config build/package/nfpm-gui.yaml --packager archlinux --target dist/
+	@rm -rf staging
+	@echo "Packages generated in dist/:"
+	@ls -lh dist/*.deb dist/*.rpm dist/*.pkg.tar.zst 2>/dev/null || true
 
 ## install: Install sweep binaries, .desktop entry, and icons to system directories
 install:
