@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"github.com/efzynx/sweep/internal/adapters"
 	"github.com/efzynx/sweep/internal/core"
 	"github.com/efzynx/sweep/internal/core/distro"
@@ -478,4 +480,37 @@ func (a *App) UpdateConfig(cfg core.Config) error {
 	}
 
 	return nil
+}
+
+// MinimizeWindow minimizes the application window.
+func (a *App) MinimizeWindow() {
+	a.mu.RLock()
+	ctx := a.ctx
+	a.mu.RUnlock()
+
+	if ctx != nil {
+		wailsruntime.WindowMinimise(ctx)
+	}
+}
+
+// ToggleMaximizeWindow toggles between maximized and restored window states.
+func (a *App) ToggleMaximizeWindow() {
+	a.mu.RLock()
+	ctx := a.ctx
+	a.mu.RUnlock()
+
+	if ctx != nil {
+		wailsruntime.WindowToggleMaximise(ctx)
+	}
+}
+
+// QuitApp cleanly terminates the desktop application.
+func (a *App) QuitApp() {
+	a.mu.RLock()
+	ctx := a.ctx
+	a.mu.RUnlock()
+
+	if ctx != nil {
+		wailsruntime.Quit(ctx)
+	}
 }

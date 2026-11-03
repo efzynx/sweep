@@ -320,4 +320,34 @@ export const api = {
     }
     return Promise.resolve();
   },
+
+  minimizeWindow(): void {
+    if (isWailsRuntime()) {
+      if ((window as any)?.go?.gui?.App?.MinimizeWindow) {
+        (window as any).go.gui.App.MinimizeWindow();
+      } else if ((window as any)?.runtime?.WindowMinimise) {
+        (window as any).runtime.WindowMinimise();
+      }
+    }
+  },
+
+  toggleMaximizeWindow(): void {
+    if (isWailsRuntime()) {
+      if ((window as any)?.go?.gui?.App?.ToggleMaximizeWindow) {
+        (window as any).go.gui.App.ToggleMaximizeWindow();
+      } else if ((window as any)?.runtime?.WindowToggleMaximise) {
+        (window as any).runtime.WindowToggleMaximise();
+      }
+    }
+  },
+
+  quitApp(): void {
+    if (isWailsRuntime()) {
+      if ((window as any)?.go?.gui?.App?.QuitApp) {
+        (window as any).go.gui.App.QuitApp();
+      } else if ((window as any)?.runtime?.Quit) {
+        (window as any).runtime.Quit();
+      }
+    }
+  },
 };

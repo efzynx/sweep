@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { AppConfig } from '../types';
-  import { IconSettings, IconX, IconCheck } from '../icons';
+  import { IconSettings, IconX, IconCheck, IconChevronDown } from '../icons';
 
   let {
     isOpen = false,
@@ -134,14 +134,19 @@
               <span class="text-xs font-semibold text-slate-200">Execution Log Level</span>
               <span class="text-[11px] text-nordic-text-muted">Verbosity of engine messages and diagnostics</span>
             </div>
-            <select
-              bind:value={logLevel}
-              class="bg-[#162030] border border-nordic-border rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-nordic-cyan"
-            >
-              <option value="info">Info</option>
-              <option value="debug">Debug</option>
-              <option value="warn">Warn</option>
-            </select>
+            <div class="relative">
+              <select
+                bind:value={logLevel}
+                class="appearance-none bg-[#162030] border border-nordic-border rounded px-3 py-1.5 pr-8 text-xs text-white focus:outline-none focus:border-nordic-cyan cursor-pointer [color-scheme:dark]"
+              >
+                <option value="info" class="bg-[#0c121d] text-slate-200">Info</option>
+                <option value="debug" class="bg-[#0c121d] text-slate-200">Debug</option>
+                <option value="warn" class="bg-[#0c121d] text-slate-200">Warn</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-nordic-text-muted">
+                <IconChevronDown size={13} />
+              </div>
+            </div>
           </div>
         </div>
 
