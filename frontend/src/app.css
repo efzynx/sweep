@@ -38,3 +38,21 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* Enforce dark-mode native select and dropdown options in WebKitGTK / Linux */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #0c121d;
+  color: #f1f5f9;
+}
+
+select option:hover,
+select option:focus,
+select option:active,
+select option:checked {
+  background-color: #162030;
+  color: #06b6d4;
+}

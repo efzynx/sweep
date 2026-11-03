@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { DistroInfo } from '../types';
   import { IconSweep, IconShield, IconRefresh, IconSettings } from '../icons';
+  import { api } from '../api';
 
   let {
     distro,
@@ -69,9 +70,27 @@
       <IconSettings size={14} />
     </button>
     <div class="flex items-center gap-2 pl-2 border-l border-nordic-border/60">
-      <div class="w-3 h-3 rounded-full bg-[#f59e0b] border border-[#d97706]/80"></div>
-      <div class="w-3 h-3 rounded-full bg-[#10b981] border border-[#059669]/80"></div>
-      <div class="w-3 h-3 rounded-full bg-[#ef4444] border border-[#dc2626]/80"></div>
+      <button
+        type="button"
+        title="Minimize window"
+        aria-label="Minimize"
+        onclick={() => api.minimizeWindow()}
+        class="w-3.5 h-3.5 rounded-full bg-[#f59e0b] border border-[#d97706]/80 hover:brightness-125 active:scale-90 transition-all cursor-pointer focus:outline-none"
+      ></button>
+      <button
+        type="button"
+        title="Maximize / Restore window"
+        aria-label="Maximize or Restore"
+        onclick={() => api.toggleMaximizeWindow()}
+        class="w-3.5 h-3.5 rounded-full bg-[#10b981] border border-[#059669]/80 hover:brightness-125 active:scale-90 transition-all cursor-pointer focus:outline-none"
+      ></button>
+      <button
+        type="button"
+        title="Close Sweep"
+        aria-label="Close"
+        onclick={() => api.quitApp()}
+        class="w-3.5 h-3.5 rounded-full bg-[#ef4444] border border-[#dc2626]/80 hover:brightness-125 active:scale-90 transition-all cursor-pointer focus:outline-none"
+      ></button>
     </div>
   </div>
 </div>

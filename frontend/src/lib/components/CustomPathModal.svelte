@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconPlus, IconX, IconCheck } from '../icons';
+  import { IconPlus, IconX, IconCheck, IconChevronDown } from '../icons';
 
   let {
     isOpen = false,
@@ -136,15 +136,20 @@
 
           <div class="flex flex-col gap-1.5">
             <label for="safety-level" class="font-semibold text-nordic-text-secondary text-[11.5px]">Safety Level</label>
-            <select
-              id="safety-level"
-              bind:value={safety}
-              class="bg-[#080c13] border border-nordic-border rounded-md px-2.5 py-2 text-white font-sans text-xs focus:border-nordic-cyan outline-none transition"
-            >
-              <option value="SAFE">SAFE (Recommended)</option>
-              <option value="CAUTION">CAUTION</option>
-              <option value="HIGH">HIGH</option>
-            </select>
+            <div class="relative">
+              <select
+                id="safety-level"
+                bind:value={safety}
+                class="w-full appearance-none bg-[#080c13] border border-nordic-border rounded-md px-3 py-2 pr-8 text-white font-sans text-xs focus:border-nordic-cyan outline-none transition cursor-pointer [color-scheme:dark]"
+              >
+                <option value="SAFE" class="bg-[#0c121d] text-slate-200">SAFE (Recommended)</option>
+                <option value="CAUTION" class="bg-[#0c121d] text-slate-200">CAUTION</option>
+                <option value="HIGH" class="bg-[#0c121d] text-slate-200">HIGH</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-nordic-text-muted">
+                <IconChevronDown size={14} />
+              </div>
+            </div>
           </div>
         </div>
 
