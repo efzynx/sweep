@@ -33,6 +33,19 @@ var (
 			Foreground(ColorPrimary).
 			Padding(0, 1)
 
+	AuthorStyle = lipgloss.NewStyle().
+			Foreground(ColorMuted).
+			Bold(false)
+
+	TargetBadgeStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorFgWhite).
+				Background(lipgloss.Color("#0E7490")).
+				Padding(0, 1)
+
+	TargetTextStyle = lipgloss.NewStyle().
+			Foreground(ColorMuted)
+
 	DistroBadgeStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(ColorAccent).

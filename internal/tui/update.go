@@ -97,6 +97,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ViewModeMain:
 		return m.handleMainKeys(key)
 
+	case ViewModeAbout:
+		return m.handleAboutKeys(key)
+
 	case ViewModeModal:
 		return m.handleModalKeys(key)
 
@@ -259,6 +262,24 @@ func (m Model) handleMainKeys(key string) (tea.Model, tea.Cmd) {
 		m.modalType = ModalTypeClean
 		m.viewMode = ViewModeModal
 		return m, nil
+
+	case "?", "i": // About & System Info modal
+		m.viewMode = ViewModeAbout
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func (m Model) handleAboutKeys(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc", "q", "?", "i", "enter", " ":
+		m.viewMode = ViewModeMain
+		return m, nil
+
+	case "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
 	}
 
 	return m, nil

@@ -73,3 +73,35 @@ func RenderDiskUsageBar(stats DiskStats, barWidth int) string {
 
 	return fmt.Sprintf("[%s%s] %.1f%% (%s / %s)", filled, empty, stats.UsedPercent, usedStr, totalStr)
 }
+
+// RenderRootDiskStats formats a visual progress meter and comprehensive storage stats string.
+// Returns (visualBar, statsLine).
+// visualBar: "[██████████████░░░░░░] 69.0%"
+// statsLine: "Total: <TotalBytes>  •  Tersisa (Free): <FreeBytes>  •  Terpakai (Used): <UsedBytes>"
+func RenderRootDiskStats(stats DiskStats, barWidth int) (string, string) {
+	if barWidth < 5 {
+		barWidth = 10
+	}
+
+	fillWidth := int((stats.UsedPercent / 100.0) * float64(barWidth))
+	if fillWidth > barWidth {
+		fillWidth = barWidth
+	}
+	if fillWidth < 0 {
+		fillWidth = 0
+	}
+	emptyWidth := barWidth - fillWidth
+
+	filled := strings.Repeat("█", fillWidth)
+	empty := strings.Repeat("░", emptyWidth)
+
+	visualBar := fmt.Sprintf("[%s%s] %.1f%%", filled, empty, stats.UsedPercent)
+
+	totalStr := core.FormatBytes(int64(stats.TotalBytes))
+	freeStr := core.FormatBytes(int64(stats.FreeBytes))
+	usedStr := core.FormatBytes(int64(stats.UsedBytes))
+
+	statsLine := fmt.Sprintf("Total: %s  •  Tersisa (Free): %s  •  Terpakai (Used): %s", totalStr, freeStr, usedStr)
+
+	return visualBar, statsLine
+}

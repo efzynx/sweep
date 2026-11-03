@@ -10,9 +10,12 @@ import (
 
 // renderModal generates the centered confirmation dialog for Dry-Run or Clean operations.
 func (m *Model) renderModal() string {
-	modalWidth := 66
-	if m.width < 70 {
+	modalWidth := 74
+	if m.width < 78 {
 		modalWidth = m.width - 4
+	}
+	if modalWidth < 50 {
+		modalWidth = 50
 	}
 
 	titleText := "DRY-RUN SIMULATION"
@@ -26,6 +29,13 @@ func (m *Model) renderModal() string {
 
 	var lines []string
 	lines = append(lines, title)
+
+	targetNotice := lipgloss.NewStyle().
+		Foreground(ColorPrimary).
+		Width(modalWidth - 6).
+		Render("Target: Root Filesystem (/) — Operations clean system packages, containers, runtimes, and snapshots.")
+	lines = append(lines, targetNotice)
+	lines = append(lines, "")
 
 	selCount := m.TotalSelectedCount()
 	selBytes := m.TotalSelectedBytes()

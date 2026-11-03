@@ -417,6 +417,24 @@ func TestTUI_ZeroEmojisValidation(t *testing.T) {
 			t.Fatalf("forbidden emoji rune found in rendered TUI: %c (U+%X)", r, r)
 		}
 	}
+
+	// Check About modal view
+	m.viewMode = ViewModeAbout
+	aboutRendered := m.View()
+	for _, r := range aboutRendered {
+		if (r >= 0x1F300 && r <= 0x1FAFF) || (r >= 0x2600 && r <= 0x27BF) {
+			t.Fatalf("forbidden emoji rune found in rendered About modal: %c (U+%X)", r, r)
+		}
+	}
+
+	// Check Modal view
+	m.viewMode = ViewModeModal
+	modalRendered := m.View()
+	for _, r := range modalRendered {
+		if (r >= 0x1F300 && r <= 0x1FAFF) || (r >= 0x2600 && r <= 0x27BF) {
+			t.Fatalf("forbidden emoji rune found in rendered Confirmation modal: %c (U+%X)", r, r)
+		}
+	}
 }
 
 func TestTUI_DiskBarFormatting(t *testing.T) {
@@ -433,5 +451,166 @@ func TestTUI_DiskBarFormatting(t *testing.T) {
 	}
 	if !strings.Contains(bar, "40.00 GB") || !strings.Contains(bar, "100.00 GB") {
 		t.Errorf("expected byte sizes in bar, got: %s", bar)
+	}
+}
+
+func TestTUI_RootDiskStatsFormatting(t *testing.T) {
+	stats := DiskStats{
+		TotalBytes:  500 * 1024 * 1024 * 1024,
+		UsedBytes:   345 * 1024 * 1024 * 1024,
+		FreeBytes:   155 * 1024 * 1024 * 1024,
+		UsedPercent: 69.0,
+	}
+
+	visualBar, statsLine := RenderRootDiskStats(stats, 20)
+
+	// Verify visual bar contains progress blocks and percentage
+	if !strings.Contains(visualBar, "69.0%") {
+		t.Errorf("expected 69.0%% in visualBar, got: %s", visualBar)
+	}
+	if !strings.Contains(visualBar, "█") || !strings.Contains(visualBar, "░") {
+		t.Errorf("expected block characters in visualBar, got: %s", visualBar)
+	}
+
+	// Verify statsLine explicitly displays Total, Free (Tersisa), and Used (Terpakai)
+	if !strings.Contains(statsLine, "Total:") {
+		t.Errorf("expected 'Total:' in statsLine, got: %s", statsLine)
+	}
+	if !strings.Contains(statsLine, "Tersisa (Free):") {
+		t.Errorf("expected 'Tersisa (Free):' in statsLine, got: %s", statsLine)
+	}
+	if !strings.Contains(statsLine, "Terpakai (Used):") {
+		t.Errorf("expected 'Terpakai (Used):' in statsLine, got: %s", statsLine)
+	}
+	if !strings.Contains(statsLine, "500.00 GB") || !strings.Contains(statsLine, "155.00 GB") || !strings.Contains(statsLine, "345.00 GB") {
+		t.Errorf("expected formatted byte sizes in statsLine, got: %s", statsLine)
+	}
+}
+
+func TestTUI_HeaderAndModalRootNotices(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+	m := NewModel(context.Background(), reg, cfg)
+	m.width = 110
+	m.height = 30
+	m.diskStats = DiskStats{
+		TotalBytes:  100 * 1024 * 1024 * 1024,
+		UsedBytes:   50 * 1024 * 1024 * 1024,
+		FreeBytes:   50 * 1024 * 1024 * 1024,
+		UsedPercent: 50.0,
+	}
+
+	// 1. Verify Header output
+	header := m.renderHeader()
+	if !strings.Contains(header, "Ahmad Fauzan Adiman (Efzyn)") {
+		t.Errorf("expected author in header, got:\n%s", header)
+	}
+	if !strings.Contains(header, "[TARGET: ROOT FILESYSTEM (/)]") {
+		t.Errorf("expected target root badge in header, got:\n%s", header)
+	}
+	if !strings.Contains(header, "Mode Optimasi & Pemeliharaan Sistem Linux") {
+		t.Errorf("expected mode text in header, got:\n%s", header)
+	}
+	if !strings.Contains(header, "Total:") || !strings.Contains(header, "Tersisa (Free):") || !strings.Contains(header, "Terpakai (Used):") {
+		t.Errorf("expected detailed disk stats in header, got:\n%s", header)
+	}
+
+	// 2. Verify Confirmation Modal output
+	m.viewMode = ViewModeModal
+	m.modalType = ModalTypeDryRun
+	modal := m.renderModal()
+	if !strings.Contains(modal, "Target: Root Filesystem (/)") || !strings.Contains(modal, "Operations clean system packages") {
+		t.Errorf("expected target notice in modal, got:\n%s", modal)
+	}
+
+	// 3. Verify Footer contains [?] info
+	footer := m.renderFooter()
+	if !strings.Contains(footer, "[?]") || !strings.Contains(footer, "info") {
+		t.Errorf("expected '[?]' and 'info' in footer, got:\n%s", footer)
+	}
+}
+
+func TestTUI_AboutModalRenderingAndKeys(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+	m := NewModel(context.Background(), reg, cfg)
+	m.width = 100
+	m.height = 30
+
+	// 1. Test key '?' opens About modal
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newM.(Model)
+	if m.viewMode != ViewModeAbout {
+		t.Fatalf("expected viewMode ViewModeAbout after '?', got %v", m.viewMode)
+	}
+
+	// 2. Test rendering of About modal content
+	viewOutput := m.View()
+	expectedSubstrings := []string{
+		"ABOUT & SYSTEM INFO",
+		"Sweep - Modern Multi-Distro Linux System Cleaner",
+		"Ahmad Fauzan Adiman (Efzyn)",
+		"<me@efzyn.my.id>",
+		"github.com/efzynx/sweep",
+		"MIT License",
+		"Targeting root filesystem (/)",
+		"containers, flatpak, and snapshots",
+		"[Tab] / [h]/[l]",
+		"[j]/[k] / [Down]/[Up]",
+		"[Space]",
+		"[a]",
+		"[s]",
+		"[d]",
+		"[Enter]",
+		"[?] / [i]",
+		"[q] / [Ctrl+C]",
+		"Press [Esc], [?], [q], or [Enter] to return",
+	}
+
+	for _, sub := range expectedSubstrings {
+		if !strings.Contains(viewOutput, sub) {
+			t.Errorf("expected %q in About modal view output, but not found", sub)
+		}
+	}
+
+	// 3. Test dismissal keys return to ViewModeMain
+	dismissKeys := []string{"esc", "q", "?", "i", "enter", " "}
+	for _, dk := range dismissKeys {
+		m.viewMode = ViewModeAbout
+		var msg tea.KeyMsg
+		switch dk {
+		case "esc":
+			msg = tea.KeyMsg{Type: tea.KeyEsc}
+		case "enter":
+			msg = tea.KeyMsg{Type: tea.KeyEnter}
+		case " ":
+			msg = tea.KeyMsg{Type: tea.KeySpace}
+		default:
+			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(dk)}
+		}
+
+		newM, _ = m.Update(msg)
+		resM := newM.(Model)
+		if resM.viewMode != ViewModeMain {
+			t.Errorf("expected dismissing with %q to return to ViewModeMain, got %v", dk, resM.viewMode)
+		}
+	}
+
+	// 4. Test key 'i' also opens About modal
+	m.viewMode = ViewModeMain
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	m = newM.(Model)
+	if m.viewMode != ViewModeAbout {
+		t.Fatalf("expected viewMode ViewModeAbout after 'i', got %v", m.viewMode)
+	}
+
+	// 5. Test ctrl+c quits
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = newM.(Model)
+	if !m.quitting {
+		t.Errorf("expected m.quitting to be true on ctrl+c in About modal")
+	}
+	if cmd == nil {
+		t.Errorf("expected tea.Quit command on ctrl+c in About modal")
 	}
 }

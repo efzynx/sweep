@@ -22,6 +22,8 @@ func (m Model) View() string {
 	switch m.viewMode {
 	case ViewModeModal:
 		return m.renderModal()
+	case ViewModeAbout:
+		return m.renderAboutModal()
 	case ViewModeExecuting:
 		return m.renderExecuting()
 	case ViewModeDone:
@@ -79,7 +81,7 @@ func (m *Model) renderCompact() string {
 		core.FormatBytes(m.TotalSelectedBytes()),
 	)
 
-	prompt := lipgloss.NewStyle().Foreground(ColorMuted).Render("[d] Dry-run  [Enter] Clean  [q] Quit")
+	prompt := lipgloss.NewStyle().Foreground(ColorMuted).Render("[d] Dry-run  [Enter] Clean  [?] Info  [q] Quit")
 
 	return strings.Join([]string{title, status, summary, prompt}, "\n\n")
 }

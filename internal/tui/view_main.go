@@ -10,10 +10,15 @@ import (
 
 // renderHeader generates the top application banner, distro badge, and disk meter.
 func (m *Model) renderHeader() string {
-	// Top Line: SWEEP banner and distro badge
+	topWidth := m.width
+	if topWidth < 40 {
+		topWidth = 40
+	}
+
+	// Top Line: SWEEP banner, author credit, and distro badge
 	banner := BannerStyle.Render("SWEEP")
 	sub := BannerSubStyle.Render("SYSTEM CLEANER")
-	appTitle := lipgloss.JoinHorizontal(lipgloss.Center, banner, sub)
+	author := AuthorStyle.Render("• By Ahmad Fauzan Adiman (Efzyn)")
 
 	distroStr := "Unknown Linux"
 	if m.distroInfo != nil {
@@ -25,30 +30,57 @@ func (m *Model) renderHeader() string {
 	}
 	distroBadge := DistroBadgeStyle.Render(fmt.Sprintf("[Distro: %s]", distroStr))
 
-	topWidth := m.width
-	if topWidth < 40 {
-		topWidth = 40
+	var topLine string
+	var authorLine string
+	if topWidth >= 90 {
+		appTitle := lipgloss.JoinHorizontal(lipgloss.Center, banner, sub, lipgloss.NewStyle().SetString(" ").String(), author)
+		gapWidth := topWidth - lipgloss.Width(appTitle) - lipgloss.Width(distroBadge) - 2
+		if gapWidth < 1 {
+			gapWidth = 1
+		}
+		topLine = lipgloss.JoinHorizontal(lipgloss.Center, appTitle, strings.Repeat(" ", gapWidth), distroBadge)
+	} else {
+		appTitle := lipgloss.JoinHorizontal(lipgloss.Center, banner, sub)
+		gapWidth := topWidth - lipgloss.Width(appTitle) - lipgloss.Width(distroBadge) - 2
+		if gapWidth < 1 {
+			gapWidth = 1
+		}
+		topLine = lipgloss.JoinHorizontal(lipgloss.Center, appTitle, strings.Repeat(" ", gapWidth), distroBadge)
+		authorLine = AuthorStyle.Render("By Ahmad Fauzan Adiman (Efzyn)")
 	}
 
-	gapWidth := topWidth - lipgloss.Width(appTitle) - lipgloss.Width(distroBadge) - 2
-	if gapWidth < 1 {
-		gapWidth = 1
-	}
-	topLine := lipgloss.JoinHorizontal(lipgloss.Center, appTitle, strings.Repeat(" ", gapWidth), distroBadge)
+	// Target notification line
+	targetBadge := TargetBadgeStyle.Render("[TARGET: ROOT FILESYSTEM (/)]")
+	targetNotice := TargetTextStyle.Render(" • Mode Optimasi & Pemeliharaan Sistem Linux")
+	targetLine := lipgloss.JoinHorizontal(lipgloss.Center, targetBadge, targetNotice)
 
-	// Bottom Line: Disk usage meter for root filesystem
+	// Disk usage meter and storage metrics for root filesystem
 	diskBarWidth := 20
-	if m.width > 90 {
-		diskBarWidth = 30
+	if m.width > 95 {
+		diskBarWidth = 28
 	}
-	diskBar := RenderDiskUsageBar(m.diskStats, diskBarWidth)
+	visualBar, statsLine := RenderRootDiskStats(m.diskStats, diskBarWidth)
 	diskLabel := DiskInfoStyle.Render("Root (/) Disk Usage: ")
-	diskMeter := DiskMeterStyle.Render(diskBar)
-	bottomLine := lipgloss.JoinHorizontal(lipgloss.Center, diskLabel, diskMeter)
+	diskMeter := DiskMeterStyle.Render(visualBar)
+	diskStatsStyled := lipgloss.NewStyle().Foreground(ColorMuted).Render(statsLine)
+
+	var diskSection string
+	if topWidth >= 105 {
+		diskSection = fmt.Sprintf("%s%s   %s", diskLabel, diskMeter, diskStatsStyled)
+	} else {
+		diskSection = fmt.Sprintf("%s%s\n%s", diskLabel, diskMeter, diskStatsStyled)
+	}
 
 	divider := lipgloss.NewStyle().Foreground(ColorSubtle).Render(strings.Repeat("─", topWidth))
 
-	return lipgloss.JoinVertical(lipgloss.Left, topLine, bottomLine, divider)
+	var headerParts []string
+	headerParts = append(headerParts, topLine)
+	if authorLine != "" {
+		headerParts = append(headerParts, authorLine)
+	}
+	headerParts = append(headerParts, targetLine, diskSection, divider)
+
+	return lipgloss.JoinVertical(lipgloss.Left, headerParts...)
 }
 
 // renderLeftPane renders the list of detected modules with statuses, counts, and sizes.
@@ -270,6 +302,7 @@ func (m *Model) renderFooter() string {
 		RenderKeyHelp("[s]", "rescan"),
 		RenderKeyHelp("[d]", "dry-run"),
 		RenderKeyHelp("[Enter]", "clean"),
+		RenderKeyHelp("[?]", "info"),
 		RenderKeyHelp("[q]", "quit"),
 	}
 

@@ -18,6 +18,7 @@ type ViewMode int
 const (
 	ViewModeMain ViewMode = iota
 	ViewModeModal
+	ViewModeAbout
 	ViewModeExecuting
 	ViewModeDone
 )
