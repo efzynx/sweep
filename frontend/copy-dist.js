@@ -7,6 +7,7 @@ const srcDist = path.resolve(__dirname, 'dist');
 const targetDist = path.resolve(__dirname, '../cmd/sweep-gui/frontend/dist');
 
 if (fs.existsSync(srcDist)) {
+  fs.rmSync(targetDist, { recursive: true, force: true });
   fs.mkdirSync(targetDist, { recursive: true });
   fs.cpSync(srcDist, targetDist, { recursive: true });
   console.log(`[copy-dist] Synced build assets to ${targetDist}`);
