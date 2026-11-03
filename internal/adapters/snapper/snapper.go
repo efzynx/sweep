@@ -48,10 +48,7 @@ func New() *Module {
 		mountsPath: defaultMountsPath,
 		configs:    []string{"root", "home"},
 		commandRunner: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			if core.IsPrivileged() {
-				return exec.CommandContext(ctx, name, args...).Output()
-			}
-			return core.RunElevated(ctx, name, args...)
+			return exec.CommandContext(ctx, name, args...).Output()
 		},
 	}
 }

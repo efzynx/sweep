@@ -55,10 +55,7 @@ func New() *Module {
 		cacheDir: defaultPacmanCacheDir,
 		aurDirs:  aurDirs,
 		commandRunner: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			if core.IsPrivileged() {
-				return exec.CommandContext(ctx, name, args...).Output()
-			}
-			return core.RunElevated(ctx, name, args...)
+			return exec.CommandContext(ctx, name, args...).Output()
 		},
 	}
 }
@@ -401,6 +398,8 @@ func (m *Module) Clean(ctx context.Context, items []core.CleanableItem, opts cor
 		return cleanRes, nil
 	}
 
+	var pathsToRemove []string
+	var pathItems []core.CleanableItem
 	var orphansToRemove []core.CleanableItem
 
 	for _, item := range items {
@@ -414,16 +413,11 @@ func (m *Module) Clean(ctx context.Context, items []core.CleanableItem, opts cor
 
 		switch {
 		case strings.HasPrefix(item.ID, "pacman-cache:"), strings.HasPrefix(item.ID, "pacman-broken:"):
-			paths := []string{item.Path}
+			pathsToRemove = append(pathsToRemove, item.Path)
 			if sigFile := item.Metadata["sig_file"]; sigFile != "" {
-				paths = append(paths, filepath.Join(m.cacheDir, sigFile))
+				pathsToRemove = append(pathsToRemove, filepath.Join(m.cacheDir, sigFile))
 			}
-			if err := core.RemoveElevated(ctx, paths...); err != nil {
-				cleanRes.Errors = append(cleanRes.Errors, fmt.Errorf("failed to remove %s: %w", item.Path, err))
-			} else {
-				cleanRes.CleanedItems = append(cleanRes.CleanedItems, item)
-				cleanRes.FreedBytes += item.Size
-			}
+			pathItems = append(pathItems, item)
 
 		case strings.HasPrefix(item.ID, "pacman-orphan:"):
 			orphansToRemove = append(orphansToRemove, item)
@@ -432,6 +426,18 @@ func (m *Module) Clean(ctx context.Context, items []core.CleanableItem, opts cor
 			if err := os.RemoveAll(item.Path); err != nil && !os.IsNotExist(err) {
 				cleanRes.Errors = append(cleanRes.Errors, fmt.Errorf("failed to remove AUR cache %s: %w", item.Path, err))
 			} else {
+				cleanRes.CleanedItems = append(cleanRes.CleanedItems, item)
+				cleanRes.FreedBytes += item.Size
+			}
+		}
+	}
+
+	// Remove all package cache files in a single elevated batch call
+	if len(pathsToRemove) > 0 {
+		if err := core.RemoveElevated(ctx, pathsToRemove...); err != nil {
+			cleanRes.Errors = append(cleanRes.Errors, fmt.Errorf("failed to remove package cache files: %w", err))
+		} else {
+			for _, item := range pathItems {
 				cleanRes.CleanedItems = append(cleanRes.CleanedItems, item)
 				cleanRes.FreedBytes += item.Size
 			}
