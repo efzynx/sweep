@@ -614,3 +614,31 @@ func TestTUI_AboutModalRenderingAndKeys(t *testing.T) {
 		t.Errorf("expected tea.Quit command on ctrl+c in About modal")
 	}
 }
+
+func TestTUI_GetRootDiskStatsReal(t *testing.T) {
+	stats, err := GetRootDiskStats()
+	if err != nil {
+		t.Fatalf("unexpected error from GetRootDiskStats: %v", err)
+	}
+	if stats.TotalBytes == 0 {
+		t.Errorf("expected TotalBytes > 0")
+	}
+	if stats.FreeBytes == 0 {
+		t.Errorf("expected FreeBytes > 0")
+	}
+	if stats.TotalBytes < stats.FreeBytes {
+		t.Errorf("TotalBytes (%d) < FreeBytes (%d)", stats.TotalBytes, stats.FreeBytes)
+	}
+	if stats.UsedBytes != stats.TotalBytes-stats.FreeBytes {
+		t.Errorf("UsedBytes (%d) != TotalBytes (%d) - FreeBytes (%d)", stats.UsedBytes, stats.TotalBytes, stats.FreeBytes)
+	}
+	if stats.UsedPercent <= 0 || stats.UsedPercent > 100 {
+		t.Errorf("unexpected UsedPercent: %f", stats.UsedPercent)
+	}
+
+	// Test non-existent path returns error
+	_, err = GetDiskStats("/path/that/does/not/exist/sweep/test")
+	if err == nil {
+		t.Errorf("expected error for non-existent path, got nil")
+	}
+}

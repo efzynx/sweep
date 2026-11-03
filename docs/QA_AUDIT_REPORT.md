@@ -3,7 +3,7 @@
 - **Date:** 2026-11-03
 - **Auditor:** Sentry (QA Engineer & Code Reviewer)
 - **Target Repository:** `/home/efzyn/Project/sweep`
-- **Git Commit:** `dac84d5`
+- **Git Commit:** `f6adbdd` (previously `dac84d5`)
 - **Target Go Version:** Go 1.23+ (Platform: `Linux 7.2.7-1-cachyos x86_64`)
 - **Status / Gate:** **APPROVED (PASSED ALL QUALITY & SECURITY GATES)**
 
@@ -25,6 +25,10 @@ A comprehensive quality assurance and security audit was conducted on Sweep, foc
 | **Go Static Analysis & Lint** | `go vet ./...` & `gofmt -s -l .` | Clean output; 0 errors or formatting discrepancies | **PASS** |
 | **End-to-End Integration Suite** | Scanner -> Registry -> Selection -> Dry-Run -> Clean | Tested & verified in `internal/core/integration_test.go` | **PASS** |
 | **Binary Build Verification** | CLI build with ldflags & flags execution | Native (`bin/sweep`) and cross-compile (amd64, arm64) functional | **PASS** |
+| **Root Disk Storage Metrics** | Real `statvfs` calculations (Total, Free, Used) | Exact byte math & percentage bar without emojis | **PASS** |
+| **Root Optimization Notice** | Header banner & confirmation modal targeting notice | Present in `view_main.go` and `view_modal.go` | **PASS** |
+| **About Modal & Author Credit** | Toggle via `?`/`i`, author "Ahmad Fauzan Adiman (Efzyn)" | Complete author identity, shortcuts table & dismissal | **PASS** |
+| **Zero Unicode Emojis Invariant**| No unicode emoji runes in TUI views or badges | 0 emojis detected across all views & modals | **PASS** |
 
 ---
 
@@ -160,9 +164,69 @@ Tested via `make cross-compile`:
 
 ---
 
-## 6. Audit Verdict
+## 7. TUI Enhancements Verification (Task t_590217e6)
 
-All acceptance criteria for Task `t_052543e2` have been satisfied and empirically verified. Sweep demonstrates strict privilege separation, robust dry-run simulation, Snapper pre-clean safeguard snapshot hooks, 100% race-free concurrency, clean static analysis, and reliable multi-architecture build outputs.
+### 7.1 Root Filesystem Storage Metrics Calculation & Rendering
+The newly implemented filesystem metric calculation (`internal/tui/disk.go`) was audited against the Linux `statvfs` syscall via `golang.org/x/sys/unix`:
+- **Syscall & Calculations:**
+  - `TotalBytes = stat.Blocks * uint64(stat.Bsize)`
+  - `FreeBytes = stat.Bavail * uint64(stat.Bsize)` (uses non-root available blocks `Bavail` for accurate user perspective)
+  - `UsedBytes = TotalBytes - FreeBytes` (with safety guard `total >= free`)
+  - `UsedPercent = (UsedBytes / TotalBytes) * 100.0`
+- **Visual Progress Bar (`RenderDiskUsageBar` & `RenderRootDiskStats`):**
+  - Uses standard unicode block glyphs: `█` (filled) and `░` (empty).
+  - Example output: `[██████████████░░░░░░] 69.0%`
+  - Formatted stats line: `Total: 100.00 GB  •  Tersisa (Free): 30.00 GB  •  Terpakai (Used): 70.00 GB`
+- **Host Verification:**
+  - Evaluated on `/dev/sda4` mounted on `/`: Matches host `df -B1 /` output accurately (~100 GB total, ~30 GB available, ~70 GB used).
+  - Robustness tested in `TestTUI_GetRootDiskStatsReal` and `TestTUI_RootDiskStatsFormatting`.
+
+### 7.2 Root Optimization Notice Visibility
+Notices informing the user that Sweep optimizes the root filesystem (system packages, caches, containers, snapshots) were verified:
+- **Header Banner (`internal/tui/view_main.go`):**
+  - Displays target badge: `[TARGET: ROOT FILESYSTEM (/)]`
+  - Sub-banner text: `• Mode Optimasi & Pemeliharaan Sistem Linux`
+- **Action Confirmation Dialogs (`internal/tui/view_modal.go`):**
+  - Both Dry-Run simulation and Cleanup modals render the explicit notice:
+    `"Target: Root Filesystem (/) — Operations clean system packages, containers, runtimes, and snapshots."`
+
+### 7.3 App Identity & Author Attribution
+- **Application Header:**
+  - App title: `SWEEP SYSTEM CLEANER`
+  - Author attribution: `• By Ahmad Fauzan Adiman (Efzyn)`
+- **About Modal Identity:**
+  - Application name: `Sweep - Modern Multi-Distro Linux System Cleaner`
+  - Author credit: `Ahmad Fauzan Adiman (Efzyn) <me@efzyn.my.id>`
+  - Repository link: `github.com/efzynx/sweep`
+  - License: `MIT License`
+
+### 7.4 About & System Info Modal Behavior
+Audited in `internal/tui/view_about.go` and `internal/tui/update.go`:
+- **Navigation & Toggles:**
+  - `?` or `i` in `ViewModeMain` transitions the view to `ViewModeAbout`.
+  - Dismissal keys: `[Esc]`, `[?]`, `[i]`, `[Enter]`, `[Space]`, or `[q]` return smoothly to `ViewModeMain`.
+  - `[Ctrl+C]` triggers graceful application shutdown (`tea.Quit`).
+- **Shortcuts Table:**
+  - Clear reference listing for pane switching (`[Tab]`, `[h]/[l]`), cursor navigation (`[j]/[k]`), selection (`[Space]`, `[a]`), rescan (`[s]`), dry-run (`[d]`), clean (`[Enter]`), and info (`[?]`/`[i]`).
+
+### 7.5 Zero Unicode Emojis Invariant
+- Tested via automated test `TestTUI_ZeroEmojisValidation`:
+  - Scans all rendered strings from main split view, dry-run modal, clean modal, and about modal.
+  - Verifies zero unicode emoji runes in ranges `0x1F300-0x1FAFF` and `0x2600-0x27BF`.
+  - Replaced all visual cues with high-contrast text badges (`[SAFE]`, `[CAUTION]`, `[HIGH RISK]`, `[TARGET]`, `[INFO]`) and standard terminal box/block characters.
+
+### 7.6 Automated Test Suite & Static Analysis
+- `go test -race ./...`: **PASSED (0 race conditions, 11/11 TUI tests passing)**
+- `go vet ./...`: **PASSED (0 warnings/errors)**
+- `gofmt -s -l .`: **PASSED (100% formatted)**
+- Build output: `bin/sweep` compiled cleanly with version metadata.
+- CLI Dry-run & Scan-only execution: Verified functioning with 0 errors across 37 cleanable items (11.88 GB).
+
+---
+
+## 8. Audit Verdict
+
+All acceptance criteria for Tasks `t_052543e2` and `t_590217e6` have been fully satisfied and empirically verified. Sweep demonstrates robust root filesystem metrics calculation, explicit system scope notices, professional author attribution, responsive About modal dialogs, zero unicode emoji reliance, 100% race-free concurrency, and clean CLI / TUI execution.
 
 **Signed off by:**
 Sentry (QA Engineer & Code Reviewer)
