@@ -1,0 +1,8 @@
+bin/
+dist/
+*.o
+*.a
+*.so
+.DS_Store
+.directory
+*.test
