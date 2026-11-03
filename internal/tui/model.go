@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -16,16 +15,45 @@ import (
 
 // CategoryPriority returns ordinal sorting rank for subsystem categories.
 func CategoryPriority(cat string) int {
-	switch strings.ToLower(strings.TrimSpace(cat)) {
-	case "package_manager", "sandboxed_apps", "pkg", "pacman", "flatpak", "apt", "dnf":
+	title := formatCategoryTitle(cat)
+	switch title {
+	case "PACKAGE MANAGERS":
 		return 1
-	case "containers", "docker", "podman":
+	case "CONTAINERS & VIRTUALIZATION":
 		return 2
-	case "snapshots", "filesystem", "system", "snapper", "btrfs":
+	case "DEVELOPER CACHES":
 		return 3
-	default:
+	case "SYSTEM & DESKTOP":
 		return 4
+	case "FILESYSTEM & SNAPSHOTS":
+		return 5
+	case "USER CUSTOM RULES":
+		return 6
+	default:
+		return 7
 	}
+}
+
+// leftPaneVisibleRows computes the available vertical content rows for the left tree pane.
+func (m *Model) leftPaneVisibleRows() int {
+	headerHeight := 2
+	if m.width < 90 {
+		headerHeight = 3
+	}
+	footerHeight := 1
+	mainHeight := m.height - headerHeight - footerHeight
+	if mainHeight < 4 {
+		mainHeight = 4
+	}
+	paneContentHeight := mainHeight - 2
+	if paneContentHeight < 1 {
+		paneContentHeight = 1
+	}
+	avail := paneContentHeight - 1 // 1 row for SUBSYSTEMS title
+	if avail < 1 {
+		avail = 1
+	}
+	return avail
 }
 
 // ViewMode represents the currently active full-screen or overlay mode.

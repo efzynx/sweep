@@ -255,3 +255,18 @@ func RenderCategoryBadge(cat string) string {
 func RenderKeyHelp(key, desc string) string {
 	return fmt.Sprintf("%s %s", KeyBadge.Render(key), KeyDesc.Render(desc))
 }
+
+// truncateString safely truncates a string to maxLen runes and appends an ellipsis if truncated.
+func truncateString(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	if maxLen == 1 {
+		return "…"
+	}
+	return string(runes[:maxLen-1]) + "…"
+}

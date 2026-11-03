@@ -11,12 +11,18 @@ import (
 // formatCategoryTitle formats a subsystem category into a clean Nordic category header.
 func formatCategoryTitle(cat string) string {
 	switch strings.ToLower(strings.TrimSpace(cat)) {
-	case "package_manager", "sandboxed_apps", "pkg", "pacman", "flatpak", "apt", "dnf":
+	case "package_manager", "sandboxed_apps", "pkg", "pacman", "flatpak", "snap", "apt", "dnf", "aur":
 		return "PACKAGE MANAGERS"
-	case "containers", "docker", "podman":
+	case "containers", "docker", "podman", "virtualization":
 		return "CONTAINERS & VIRTUALIZATION"
-	case "snapshots", "filesystem", "system", "snapper", "btrfs":
-		return "FILESYSTEM & SYSTEM"
+	case "devcache", "dev_cache", "developer", "developer_cache", "npm", "go", "rust", "cargo", "pip", "uv", "build_cache":
+		return "DEVELOPER CACHES"
+	case "user_cache", "usercache", "desktop", "browser", "trash", "thumbnails", "system_logs", "logs", "journal", "system":
+		return "SYSTEM & DESKTOP"
+	case "snapshots", "snapshot", "filesystem", "snapper", "btrfs":
+		return "FILESYSTEM & SNAPSHOTS"
+	case "custom", "user_custom", "rules", "custom_rules", "paths":
+		return "USER CUSTOM RULES"
 	default:
 		c := strings.ReplaceAll(strings.ToUpper(cat), "_", " ")
 		if c == "" {
@@ -103,31 +109,19 @@ func (m *Model) renderHeader() string {
 	return lipgloss.JoinVertical(lipgloss.Left, line1, line2, divider)
 }
 
-// renderLeftPane renders the tree-structured subsystems list grouped by category.
-func (m *Model) renderLeftPane(width, height int) string {
-	titleStyle := PaneTitleInactive
-	borderStyle := InactivePaneBorder
-	if m.focus == FocusLeft {
-		titleStyle = PaneTitleActive
-		borderStyle = ActivePaneBorder
-	}
+type treeEntry struct {
+	text     string
+	modIdx   int // module index in m.modules, or -1 for category header
+	isHeader bool
+}
 
-	titleText := fmt.Sprintf("SUBSYSTEMS [%d DETECTED]", len(m.modules))
-	title := titleStyle.Render(titleText)
-
-	var lines []string
-	lines = append(lines, title)
+// buildLeftPaneEntries formats all categories and module tree nodes for the subsystems pane.
+func (m *Model) buildLeftPaneEntries(width int) ([]treeEntry, int) {
+	var entries []treeEntry
+	activeEntryIdx := 0
 
 	if len(m.modules) == 0 {
-		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  No subsystems detected."))
-		for len(lines) < height {
-			lines = append(lines, "")
-		}
-		if len(lines) > height {
-			lines = lines[:height]
-		}
-		content := strings.Join(lines, "\n")
-		return borderStyle.Width(width).Height(height).Render(content)
+		return entries, 0
 	}
 
 	// Group module indices by category preserving order
@@ -142,23 +136,25 @@ func (m *Model) renderLeftPane(width, height int) string {
 		catModules[catTitle] = append(catModules[catTitle], i)
 	}
 
-	for groupIdx, catTitle := range categoryOrder {
+	for _, catTitle := range categoryOrder {
 		modIndices := catModules[catTitle]
 		if len(modIndices) == 0 {
 			continue
 		}
 
-		// Subtle spacing between categories if vertical height allows
-		if groupIdx > 0 && len(lines) < height-len(modIndices)-1 {
-			lines = append(lines, "")
-		}
-
 		catHeader := lipgloss.NewStyle().Foreground(ColorMuted).Bold(true).Render("  " + catTitle)
-		lines = append(lines, catHeader)
+		entries = append(entries, treeEntry{
+			text:     catHeader,
+			modIdx:   -1,
+			isHeader: true,
+		})
 
 		for itemIdx, modIdx := range modIndices {
 			mod := m.modules[modIdx]
 			isActive := (modIdx == m.activeModuleIdx)
+			if isActive {
+				activeEntryIdx = len(entries)
+			}
 
 			isLastInGroup := (itemIdx == len(modIndices)-1)
 			treeGlyph := "├─ "
@@ -207,11 +203,9 @@ func (m *Model) renderLeftPane(width, height int) string {
 			if maxNameW < 4 {
 				maxNameW = 4
 			}
-			if len(name) > maxNameW {
-				name = name[:maxNameW-1] + "…"
-			}
+			name = truncateString(name, maxNameW)
 
-			gap := avail - prefixW - len(name) - badgeW
+			gap := avail - prefixW - lipgloss.Width(name) - badgeW
 			if gap < 1 {
 				gap = 1
 			}
@@ -224,7 +218,97 @@ func (m *Model) renderLeftPane(width, height int) string {
 			} else {
 				renderedRow = NormalRowStyle.Render(rowContent)
 			}
-			lines = append(lines, renderedRow)
+
+			entries = append(entries, treeEntry{
+				text:     renderedRow,
+				modIdx:   modIdx,
+				isHeader: false,
+			})
+		}
+	}
+
+	return entries, activeEntryIdx
+}
+
+// renderLeftPane renders the tree-structured subsystems list grouped by category.
+func (m *Model) renderLeftPane(width, height int) string {
+	titleStyle := PaneTitleInactive
+	borderStyle := InactivePaneBorder
+	if m.focus == FocusLeft {
+		titleStyle = PaneTitleActive
+		borderStyle = ActivePaneBorder
+	}
+
+	titleText := fmt.Sprintf("SUBSYSTEMS [%d DETECTED]", len(m.modules))
+
+	var lines []string
+
+	if len(m.modules) == 0 {
+		title := titleStyle.Render(titleText)
+		lines = append(lines, title)
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  No subsystems detected."))
+		for len(lines) < height {
+			lines = append(lines, "")
+		}
+		if len(lines) > height {
+			lines = lines[:height]
+		}
+		content := strings.Join(lines, "\n")
+		return borderStyle.Width(width).Height(height).Render(content)
+	}
+
+	entries, activeIdx := m.buildLeftPaneEntries(width)
+
+	availRows := height - 1
+	if availRows < 1 {
+		availRows = 1
+	}
+
+	if len(entries) <= availRows {
+		m.moduleScrollOff = 0
+	} else {
+		if activeIdx < m.moduleScrollOff {
+			m.moduleScrollOff = activeIdx
+			if activeIdx > 0 && entries[activeIdx-1].isHeader {
+				m.moduleScrollOff = activeIdx - 1
+			}
+		} else if activeIdx >= m.moduleScrollOff+availRows {
+			m.moduleScrollOff = activeIdx - availRows + 1
+		}
+
+		maxScroll := len(entries) - availRows
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if m.moduleScrollOff > maxScroll {
+			m.moduleScrollOff = maxScroll
+		}
+		if m.moduleScrollOff < 0 {
+			m.moduleScrollOff = 0
+		}
+
+		hasAbove := m.moduleScrollOff > 0
+		hasBelow := m.moduleScrollOff+availRows < len(entries)
+		if hasAbove && hasBelow {
+			titleText = fmt.Sprintf("SUBSYSTEMS [%d DETECTED] [↑↓]", len(m.modules))
+		} else if hasAbove {
+			titleText = fmt.Sprintf("SUBSYSTEMS [%d DETECTED] [↑]", len(m.modules))
+		} else if hasBelow {
+			titleText = fmt.Sprintf("SUBSYSTEMS [%d DETECTED] [↓]", len(m.modules))
+		}
+	}
+
+	title := titleStyle.Render(titleText)
+	lines = append(lines, title)
+
+	startIdx := m.moduleScrollOff
+	endIdx := startIdx + availRows
+	if endIdx > len(entries) {
+		endIdx = len(entries)
+	}
+	if startIdx < len(entries) {
+		for i := startIdx; i < endIdx; i++ {
+			lines = append(lines, entries[i].text)
 		}
 	}
 
@@ -249,6 +333,26 @@ func (m *Model) renderLeftPane(width, height int) string {
 	}
 
 	return rendered
+}
+
+// formatItemDetail produces a clean description string combining description and path.
+func formatItemDetail(it core.CleanableItem) string {
+	desc := strings.TrimSpace(it.Description)
+	path := strings.TrimSpace(it.Path)
+
+	if desc != "" && path != "" {
+		if strings.Contains(desc, path) {
+			return desc
+		}
+		return fmt.Sprintf("%s — %s", desc, path)
+	}
+	if desc != "" {
+		return desc
+	}
+	if path != "" {
+		return path
+	}
+	return "-"
 }
 
 // renderRightPane renders the cleanable items table for the currently active module.
@@ -316,11 +420,17 @@ func (m *Model) renderRightPane(width, height int) string {
 	// Table column widths
 	colSel := 6
 	colName := 28
-	if width < 85 {
-		colName = 18
+	if width >= 105 {
+		colName = 34
+	} else if width >= 85 {
+		colName = 32
+	} else if width < 70 {
+		colName = 20
+	} else if width < 80 {
+		colName = 24
 	}
-	colSize := 12
-	colSafety := 14
+	colSize := 11
+	colSafety := 13
 	colPath := width - colSel - colName - colSize - colSafety - 4
 	if colPath < 8 {
 		colPath = 8
@@ -366,21 +476,13 @@ func (m *Model) renderRightPane(width, height int) string {
 		}
 		selCol := fmt.Sprintf("%s %s", cursorMark, cb)
 
-		name := it.Name
-		if len(name) > colName {
-			name = name[:colName-1] + "…"
-		}
+		name := truncateString(it.Name, colName)
 
 		sizeStr := core.FormatBytes(it.Size)
 		safetyBadge := RenderSafetyBadge(it.Safety)
 
-		detail := it.Description
-		if detail == "" {
-			detail = it.Path
-		}
-		if len(detail) > colPath {
-			detail = detail[:colPath-1] + "…"
-		}
+		detail := formatItemDetail(it)
+		detail = truncateString(detail, colPath)
 
 		rowContent := fmt.Sprintf(" %-*s %-*s %-*s %-*s %s",
 			colSel, selCol,

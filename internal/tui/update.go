@@ -31,6 +31,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			progWidth = 10
 		}
 		m.progress.Width = progWidth
+		m.adjustModuleScroll()
+		if active := m.ActiveModule(); active != nil {
+			m.adjustItemScroll(active)
+		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -312,14 +316,31 @@ func (m Model) handleModalKeys(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) adjustModuleScroll() {
-	visibleRows := m.height - 8
-	if visibleRows < 4 {
-		visibleRows = 4
+	availRows := m.leftPaneVisibleRows()
+	entries, activeIdx := m.buildLeftPaneEntries(30)
+	if len(entries) <= availRows {
+		m.moduleScrollOff = 0
+		return
 	}
-	if m.activeModuleIdx < m.moduleScrollOff {
-		m.moduleScrollOff = m.activeModuleIdx
-	} else if m.activeModuleIdx >= m.moduleScrollOff+visibleRows {
-		m.moduleScrollOff = m.activeModuleIdx - visibleRows + 1
+
+	if activeIdx < m.moduleScrollOff {
+		m.moduleScrollOff = activeIdx
+		if activeIdx > 0 && entries[activeIdx-1].isHeader {
+			m.moduleScrollOff = activeIdx - 1
+		}
+	} else if activeIdx >= m.moduleScrollOff+availRows {
+		m.moduleScrollOff = activeIdx - availRows + 1
+	}
+
+	maxScroll := len(entries) - availRows
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if m.moduleScrollOff > maxScroll {
+		m.moduleScrollOff = maxScroll
+	}
+	if m.moduleScrollOff < 0 {
+		m.moduleScrollOff = 0
 	}
 }
 

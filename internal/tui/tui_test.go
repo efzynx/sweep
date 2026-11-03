@@ -1115,3 +1115,370 @@ func TestTUI_Concept2_ComprehensiveQA(t *testing.T) {
 		t.Errorf("compact footer missing core keys: %s", fCompact)
 	}
 }
+
+func setupPhase2MultiCategoryRegistry() (*core.Registry, []*mockTestModule) {
+	reg := core.NewRegistry()
+
+	mods := []*mockTestModule{
+		{
+			id:       "pacman_mod",
+			name:     "Pacman Cache & Orphans",
+			category: "pkg",
+			items: []core.CleanableItem{
+				{ID: "pacman-1", Name: "linux-kernel-old", Size: 500 * 1024 * 1024, Safety: core.SafetySafe, Path: "/var/cache/pacman/pkg/linux.pkg"},
+			},
+		},
+		{
+			id:       "flatpak_mod",
+			name:     "Flatpak Unused Runtimes",
+			category: "sandboxed_apps",
+			items: []core.CleanableItem{
+				{ID: "flatpak-1", Name: "org.gnome.Platform//45", Size: 800 * 1024 * 1024, Safety: core.SafetySafe, Path: "/var/lib/flatpak/runtime/org.gnome.Platform"},
+			},
+		},
+		{
+			id:       "snap_mod",
+			name:     "Snap Disabled Revisions",
+			category: "snap",
+			items: []core.CleanableItem{
+				{ID: "snap-1", Name: "core20 (rev 1822)", Size: 120 * 1024 * 1024, Safety: core.SafetySafe, Path: "/var/lib/snapd/snaps/core20_1822.snap"},
+			},
+		},
+		{
+			id:       "apt_mod",
+			name:     "APT Archives & Autoremove",
+			category: "apt",
+			items: []core.CleanableItem{
+				{ID: "apt-1", Name: "deb-archives-cache", Size: 350 * 1024 * 1024, Safety: core.SafetySafe, Path: "/var/cache/apt/archives"},
+			},
+		},
+		{
+			id:       "docker_mod",
+			name:     "Docker System Prune",
+			category: "containers",
+			items: []core.CleanableItem{
+				{ID: "dock-1", Name: "dangling-images", Size: 1500 * 1024 * 1024, Safety: core.SafetySafe, Description: "Dangling build cache layers"},
+			},
+		},
+		{
+			id:       "devcache_mod",
+			name:     "Developer Build Caches",
+			category: "devcache",
+			items: []core.CleanableItem{
+				{
+					ID:          "dev-1",
+					Name:        "npm global cache (~/.npm/_cacache)",
+					Size:        2500 * 1024 * 1024,
+					Safety:      core.SafetySafe,
+					Description: "npm package manager download and cache directory",
+					Path:        "/home/efzyn/.npm/_cacache",
+				},
+				{
+					ID:          "dev-2",
+					Name:        "Go module cache",
+					Size:        3500 * 1024 * 1024,
+					Safety:      core.SafetyCaution,
+					Description: "Go downloaded module dependencies cache (go env GOMODCACHE)",
+					Path:        "/home/efzyn/go/pkg/mod",
+				},
+				{
+					ID:          "dev-3",
+					Name:        "Cargo cache tarballs",
+					Size:        1500 * 1024 * 1024,
+					Safety:      core.SafetySafe,
+					Description: "Downloaded Cargo crates registry cache",
+					Path:        "/home/efzyn/.cargo/registry/cache",
+				},
+			},
+		},
+		{
+			id:       "usercache_mod",
+			name:     "Desktop & Browser Caches",
+			category: "user_cache",
+			items: []core.CleanableItem{
+				{
+					ID:          "uc-1",
+					Name:        "Firefox Cache (profile.default)",
+					Size:        800 * 1024 * 1024,
+					Safety:      core.SafetySafe,
+					Description: "Firefox HTTP cache2 for profile profile.default (3450 files)",
+					Path:        "/home/efzyn/.cache/mozilla/firefox/profile.default/cache2",
+				},
+				{
+					ID:          "uc-2",
+					Name:        "Desktop Trash Can",
+					Size:        500 * 1024 * 1024,
+					Safety:      core.SafetySafe,
+					Description: "Deleted files in ~/.local/share/Trash (120 files)",
+					Path:        "/home/efzyn/.local/share/Trash",
+				},
+			},
+		},
+		{
+			id:       "journal_mod",
+			name:     "Systemd Journal Logs",
+			category: "system_logs",
+			items: []core.CleanableItem{
+				{
+					ID:          "jour-1",
+					Name:        "Systemd Journal Logs",
+					Size:        1200 * 1024 * 1024,
+					Safety:      core.SafetySafe,
+					Description: "Archived systemd logs (>14d retention)",
+					Path:        "/var/log/journal",
+				},
+			},
+		},
+		{
+			id:       "snapper_mod",
+			name:     "Snapper Btrfs Snapshots",
+			category: "snapshots",
+			items: []core.CleanableItem{
+				{
+					ID:          "snap-sub-1",
+					Name:        "Timeline Snapshot #42",
+					Size:        5500 * 1024 * 1024,
+					Safety:      core.SafetySafe,
+					Description: "Btrfs pre-system update safeguard snapshot",
+					Path:        "/.snapshots/42/snapshot",
+				},
+			},
+		},
+		{
+			id:       "custom_mod",
+			name:     "User Custom Rules",
+			category: "custom",
+			items: []core.CleanableItem{
+				{
+					ID:          "cust-1",
+					Name:        "Custom build artifacts",
+					Size:        1500 * 1024 * 1024,
+					Safety:      core.SafetySafe,
+					Description: "Temporary build directory /home/efzyn/scratch/build",
+					Path:        "/home/efzyn/scratch/build",
+				},
+			},
+		},
+	}
+
+	for _, m := range mods {
+		_ = reg.Register(m)
+	}
+
+	return reg, mods
+}
+
+func TestTUI_Phase2_MultiCategoryTreeHierarchy(t *testing.T) {
+	reg, _ := setupPhase2MultiCategoryRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, err := reg.ScanAll(context.Background())
+	if err != nil {
+		t.Fatalf("ScanAll failed: %v", err)
+	}
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+	m.width = 120
+	m.height = 35
+
+	leftPane := m.renderLeftPane(38, 26)
+
+	// Verify all 6 category titles appear in the tree
+	expectedCategories := []string{
+		"PACKAGE MANAGERS",
+		"CONTAINERS & VIRTUALIZATION",
+		"DEVELOPER CACHES",
+		"SYSTEM & DESKTOP",
+		"FILESYSTEM & SNAPSHOTS",
+		"USER CUSTOM RULES",
+	}
+
+	for _, cat := range expectedCategories {
+		if !strings.Contains(leftPane, cat) {
+			t.Errorf("left pane missing category header %q:\n%s", cat, leftPane)
+		}
+	}
+
+	// Verify total detected count in title
+	if !strings.Contains(leftPane, "SUBSYSTEMS [10 DETECTED]") {
+		t.Errorf("left pane missing 'SUBSYSTEMS [10 DETECTED]':\n%s", leftPane)
+	}
+
+	// Verify box-drawing glyphs ├─ and └─ are used
+	if !strings.Contains(leftPane, "├─") {
+		t.Errorf("left pane missing branch glyph '├─':\n%s", leftPane)
+	}
+	if !strings.Contains(leftPane, "└─") {
+		t.Errorf("left pane missing leaf glyph '└─':\n%s", leftPane)
+	}
+}
+
+func TestTUI_Phase2_TreeScrolling_8PlusModules(t *testing.T) {
+	reg, _ := setupPhase2MultiCategoryRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+
+	// Set a constrained terminal size where 10 modules + 6 categories (16 rows) exceed visible height
+	m.width = 100
+	m.height = 18
+
+	// Initial view at top (activeModuleIdx = 0)
+	if m.activeModuleIdx != 0 {
+		t.Fatalf("expected initial activeModuleIdx to be 0, got %d", m.activeModuleIdx)
+	}
+
+	leftPaneInitial := m.renderLeftPane(32, 11)
+	if !strings.Contains(leftPaneInitial, "PACKAGE MANAGERS") {
+		t.Errorf("expected top category 'PACKAGE MANAGERS' visible at initial scroll:\n%s", leftPaneInitial)
+	}
+
+	// Navigate down with 'j' to the very last module (index 9: User Custom Rules)
+	for i := 0; i < 9; i++ {
+		newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		m = newM.(Model)
+
+		// Assert height invariant holds at every step
+		v := m.View()
+		if lipgloss.Height(v) > m.height {
+			t.Fatalf("height overflow at step %d: got %d, max allowed %d", i, lipgloss.Height(v), m.height)
+		}
+	}
+
+	if m.activeModuleIdx != 9 {
+		t.Fatalf("expected activeModuleIdx to be 9 after 9 downs, got %d", m.activeModuleIdx)
+	}
+
+	// Render left pane at bottom: last module must be visible
+	leftPaneBottom := m.renderLeftPane(32, 11)
+	if !strings.Contains(leftPaneBottom, "User Custom") {
+		t.Errorf("expected last module 'User Custom' to be visible when scrolled to bottom:\n%s", leftPaneBottom)
+	}
+	if !strings.Contains(leftPaneBottom, "> ") {
+		t.Errorf("expected active cursor '> ' to be visible when scrolled to bottom:\n%s", leftPaneBottom)
+	}
+
+	// Test jump to top with 'g'
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m = newM.(Model)
+	if m.activeModuleIdx != 0 {
+		t.Fatalf("expected activeModuleIdx=0 after 'g', got %d", m.activeModuleIdx)
+	}
+	leftPaneTop := m.renderLeftPane(32, 11)
+	if !strings.Contains(leftPaneTop, "PACKAGE MANAGERS") {
+		t.Errorf("expected 'PACKAGE MANAGERS' visible after jumping to top with 'g':\n%s", leftPaneTop)
+	}
+
+	// Test jump to bottom with 'G'
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	m = newM.(Model)
+	if m.activeModuleIdx != 9 {
+		t.Fatalf("expected activeModuleIdx=9 after 'G', got %d", m.activeModuleIdx)
+	}
+	leftPaneEnd := m.renderLeftPane(32, 11)
+	if !strings.Contains(leftPaneEnd, "User Custom") {
+		t.Errorf("expected 'User Custom' visible after jumping to bottom with 'G':\n%s", leftPaneEnd)
+	}
+}
+
+func TestTUI_Phase2_ItemInspector_FormattingAndTruncation(t *testing.T) {
+	reg, _ := setupPhase2MultiCategoryRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+
+	// Find the devcache and usercache module indices
+	var devIdx, usercacheIdx int
+	for i, mod := range m.modules {
+		if mod.Module.ID() == "devcache_mod" {
+			devIdx = i
+		}
+		if mod.Module.ID() == "usercache_mod" {
+			usercacheIdx = i
+		}
+	}
+
+	// 1. Inspect Developer Caches
+	m.activeModuleIdx = devIdx
+	m.width = 120
+	m.height = 30
+	rightPaneDev := m.renderRightPane(90, 20)
+
+	if !strings.Contains(rightPaneDev, "npm global cache") {
+		t.Errorf("right pane missing npm item:\n%s", rightPaneDev)
+	}
+	if !strings.Contains(rightPaneDev, "Go module cache") {
+		t.Errorf("right pane missing Go module item:\n%s", rightPaneDev)
+	}
+	if !strings.Contains(rightPaneDev, "[CAUTION]") {
+		t.Errorf("right pane missing [CAUTION] badge for Go module cache:\n%s", rightPaneDev)
+	}
+
+	// 2. Inspect Desktop & Browser Caches
+	m.activeModuleIdx = usercacheIdx
+	rightPaneUser := m.renderRightPane(90, 20)
+
+	if !strings.Contains(rightPaneUser, "Firefox Cache (profile.default)") {
+		t.Errorf("right pane missing 'Firefox Cache (profile.default)':\n%s", rightPaneUser)
+	}
+	if !strings.Contains(rightPaneUser, "Desktop Trash Can") {
+		t.Errorf("right pane missing 'Desktop Trash Can':\n%s", rightPaneUser)
+	}
+
+	// 3. Narrow pane width truncation check (width 55 cols)
+	narrowPane := m.renderRightPane(55, 15)
+	if !strings.Contains(narrowPane, "…") {
+		t.Errorf("narrow pane should contain ellipsis '…' for truncated columns:\n%s", narrowPane)
+	}
+}
+
+func TestTUI_Phase2_MultiGigabyteSelectionTotals(t *testing.T) {
+	reg, _ := setupPhase2MultiCategoryRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+
+	// Total scanned across all 10 modules:
+	// 500M + 800M + 120M + 350M + 1500M + (2500M+3500M+1500M) + (800M+500M) + 1200M + 5500M + 1500M = 20270 MB (~20.27 GB)
+	totScanned := m.TotalScannedBytes()
+	if totScanned <= 15*1024*1024*1024 {
+		t.Fatalf("expected scanned total to be multi-gigabyte (>15 GB), got %s", core.FormatBytes(totScanned))
+	}
+
+	// All Safe items are selected by default. Caution item (Go mod cache 3500MB) is unselected.
+	selBytes := m.TotalSelectedBytes()
+	if selBytes <= 10*1024*1024*1024 {
+		t.Fatalf("expected selected total to be multi-gigabyte (>10 GB), got %s", core.FormatBytes(selBytes))
+	}
+
+	m.width = 120
+	m.height = 30
+	footer := m.renderFooter()
+
+	if !strings.Contains(footer, "Total Reclaimable:") {
+		t.Errorf("footer missing 'Total Reclaimable:':\n%s", footer)
+	}
+	if !strings.Contains(footer, "GB") {
+		t.Errorf("footer missing multi-gigabyte 'GB' metric notation:\n%s", footer)
+	}
+
+	// Test global select-all toggle with key 'a'
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m = newM.(Model)
+	if !m.AllSelected() {
+		t.Fatalf("expected all items to be selected after 'a'")
+	}
+	if m.TotalSelectedBytes() != m.TotalScannedBytes() {
+		t.Errorf("expected selected bytes (%d) == scanned bytes (%d)", m.TotalSelectedBytes(), m.TotalScannedBytes())
+	}
+}
