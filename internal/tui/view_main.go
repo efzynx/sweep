@@ -15,19 +15,83 @@ func (m *Model) renderHeader() string {
 		topWidth = 40
 	}
 
-	// Top Line: SWEEP banner, author credit, and distro badge
-	banner := BannerStyle.Render("SWEEP")
-	sub := BannerSubStyle.Render("SYSTEM CLEANER")
-	author := AuthorStyle.Render("• By Ahmad Fauzan Adiman (Efzyn)")
-
 	distroStr := "Unknown Linux"
+	distroShort := "Linux"
 	if m.distroInfo != nil {
+		if m.distroInfo.PrettyName != "" {
+			distroShort = m.distroInfo.PrettyName
+		}
 		if m.distroInfo.Family != "" && m.distroInfo.Family != "unknown" {
 			distroStr = fmt.Sprintf("%s (%s)", m.distroInfo.PrettyName, strings.ToUpper(string(m.distroInfo.Family)))
+			if distroShort == "Linux" {
+				distroShort = string(m.distroInfo.Family)
+			}
 		} else {
 			distroStr = m.distroInfo.PrettyName
 		}
 	}
+
+	banner := BannerStyle.Render("SWEEP")
+	sub := BannerSubStyle.Render("SYSTEM CLEANER")
+
+	diskBarWidth := 20
+	if topWidth > 95 {
+		diskBarWidth = 28
+	} else if topWidth < 70 {
+		diskBarWidth = 12
+	}
+	visualBar, statsLine := RenderRootDiskStats(m.diskStats, diskBarWidth)
+	diskLabel := DiskInfoStyle.Render("Root (/) Disk Usage: ")
+	diskMeter := DiskMeterStyle.Render(visualBar)
+	diskStatsStyled := lipgloss.NewStyle().Foreground(ColorMuted).Render(statsLine)
+
+	divider := lipgloss.NewStyle().Foreground(ColorSubtle).Render(strings.Repeat("─", topWidth))
+
+	// Constrained height layout (<= 26 rows): strictly 4 rows
+	if m.height <= 26 {
+		var authorBadge string
+		var distroBadge string
+		if topWidth < 75 {
+			authorBadge = AuthorStyle.Render("By Ahmad Fauzan Adiman (Efzyn)")
+			distroBadge = DistroBadgeStyle.Render(fmt.Sprintf("[%s]", distroShort))
+		} else {
+			authorBadge = AuthorStyle.Render("• By Ahmad Fauzan Adiman (Efzyn)")
+			distroBadge = DistroBadgeStyle.Render(fmt.Sprintf("[Distro: %s]", distroStr))
+		}
+
+		var appTitle string
+		if topWidth >= 105 {
+			appTitle = lipgloss.JoinHorizontal(lipgloss.Center, banner, sub, lipgloss.NewStyle().SetString(" ").String(), authorBadge)
+		} else {
+			appTitle = lipgloss.JoinHorizontal(lipgloss.Center, banner, lipgloss.NewStyle().SetString(" ").String(), authorBadge)
+		}
+
+		gap := topWidth - lipgloss.Width(appTitle) - lipgloss.Width(distroBadge) - 2
+		if gap < 1 {
+			gap = 1
+		}
+		line1 := lipgloss.JoinHorizontal(lipgloss.Center, appTitle, strings.Repeat(" ", gap), distroBadge)
+
+		// Line 2: Target root notice
+		targetBadge := TargetBadgeStyle.Render("[TARGET: ROOT FILESYSTEM (/)]")
+		targetText := " • Mode Optimasi & Pemeliharaan Sistem Linux"
+		if topWidth < 75 {
+			targetText = " • Mode Optimasi Sistem Linux"
+		}
+		targetNotice := TargetTextStyle.Render(targetText)
+		line2 := lipgloss.JoinHorizontal(lipgloss.Center, targetBadge, targetNotice)
+
+		// Line 3: Disk meter + stats in one single row
+		line3 := fmt.Sprintf("%s%s   %s", diskLabel, diskMeter, diskStatsStyled)
+
+		// Line 4: Divider
+		line4 := divider
+
+		return lipgloss.JoinVertical(lipgloss.Left, line1, line2, line3, line4)
+	}
+
+	// Unconstrained height layout (> 26 rows): generous spacing
+	author := AuthorStyle.Render("• By Ahmad Fauzan Adiman (Efzyn)")
 	distroBadge := DistroBadgeStyle.Render(fmt.Sprintf("[Distro: %s]", distroStr))
 
 	var topLine string
@@ -54,24 +118,12 @@ func (m *Model) renderHeader() string {
 	targetNotice := TargetTextStyle.Render(" • Mode Optimasi & Pemeliharaan Sistem Linux")
 	targetLine := lipgloss.JoinHorizontal(lipgloss.Center, targetBadge, targetNotice)
 
-	// Disk usage meter and storage metrics for root filesystem
-	diskBarWidth := 20
-	if m.width > 95 {
-		diskBarWidth = 28
-	}
-	visualBar, statsLine := RenderRootDiskStats(m.diskStats, diskBarWidth)
-	diskLabel := DiskInfoStyle.Render("Root (/) Disk Usage: ")
-	diskMeter := DiskMeterStyle.Render(visualBar)
-	diskStatsStyled := lipgloss.NewStyle().Foreground(ColorMuted).Render(statsLine)
-
 	var diskSection string
 	if topWidth >= 105 {
 		diskSection = fmt.Sprintf("%s%s   %s", diskLabel, diskMeter, diskStatsStyled)
 	} else {
 		diskSection = fmt.Sprintf("%s%s\n%s", diskLabel, diskMeter, diskStatsStyled)
 	}
-
-	divider := lipgloss.NewStyle().Foreground(ColorSubtle).Render(strings.Repeat("─", topWidth))
 
 	var headerParts []string
 	headerParts = append(headerParts, topLine)
@@ -97,7 +149,7 @@ func (m *Model) renderLeftPane(width, height int) string {
 	var lines []string
 	lines = append(lines, title)
 
-	visibleRows := height - 3
+	visibleRows := height - 1
 	if visibleRows < 1 {
 		visibleRows = 1
 	}
@@ -148,21 +200,36 @@ func (m *Model) renderLeftPane(width, height int) string {
 
 		rowContent := fmt.Sprintf("%s%s %s %s %s", cursorPrefix, cb, name, catBadge, statusBadge)
 
+		rowStyle := NormalRowStyle
 		if isActive {
-			rowStyle := CursorRowStyle.Width(width - 2)
-			lines = append(lines, rowStyle.Render(rowContent))
-		} else {
-			rowStyle := NormalRowStyle.Width(width - 2)
-			lines = append(lines, rowStyle.Render(rowContent))
+			rowStyle = CursorRowStyle
 		}
+		renderedRow := rowStyle.Render(rowContent)
+		rowParts := strings.Split(renderedRow, "\n")
+		lines = append(lines, rowParts[0])
 	}
 
 	for len(lines) < height {
 		lines = append(lines, "")
 	}
+	if len(lines) > height {
+		lines = lines[:height]
+	}
 
 	content := strings.Join(lines, "\n")
-	return borderStyle.Width(width).Height(height).Render(content)
+	rendered := borderStyle.Width(width).Height(height).Render(content)
+
+	renderedLines := strings.Split(rendered, "\n")
+	expectedHeight := height + 2
+	if len(renderedLines) > expectedHeight {
+		top := renderedLines[0]
+		bottom := renderedLines[len(renderedLines)-1]
+		mid := renderedLines[1 : expectedHeight-1]
+		renderedLines = append(append([]string{top}, mid...), bottom)
+		rendered = strings.Join(renderedLines, "\n")
+	}
+
+	return rendered
 }
 
 // renderRightPane renders the cleanable items table for the currently active module.
@@ -202,7 +269,21 @@ func (m *Model) renderRightPane(width, height int) string {
 		for len(lines) < height {
 			lines = append(lines, "")
 		}
-		return borderStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+		if len(lines) > height {
+			lines = lines[:height]
+		}
+		content := strings.Join(lines, "\n")
+		rendered := borderStyle.Width(width).Height(height).Render(content)
+		renderedLines := strings.Split(rendered, "\n")
+		expectedHeight := height + 2
+		if len(renderedLines) > expectedHeight {
+			top := renderedLines[0]
+			bottom := renderedLines[len(renderedLines)-1]
+			mid := renderedLines[1 : expectedHeight-1]
+			renderedLines = append(append([]string{top}, mid...), bottom)
+			rendered = strings.Join(renderedLines, "\n")
+		}
+		return rendered
 	}
 
 	// Table column widths
@@ -214,8 +295,8 @@ func (m *Model) renderRightPane(width, height int) string {
 		colName = 18
 	}
 	colPath := width - colCheck - colName - colSize - colSafety - 6
-	if colPath < 10 {
-		colPath = 10
+	if colPath < 6 {
+		colPath = 6
 	}
 
 	// Table Header
@@ -226,9 +307,12 @@ func (m *Model) renderRightPane(width, height int) string {
 		colSafety, "SAFETY",
 		"PATH / DETAILS",
 	)
-	lines = append(lines, TableHeaderStyle.Width(width-2).Render(headerFmt))
+	thRendered := TableHeaderStyle.Width(width - 2).Render(headerFmt)
+	for _, thLine := range strings.Split(thRendered, "\n") {
+		lines = append(lines, thLine)
+	}
 
-	visibleRows := height - 4
+	visibleRows := height - len(lines)
 	if visibleRows < 1 {
 		visibleRows = 1
 	}
@@ -279,46 +363,93 @@ func (m *Model) renderRightPane(width, height int) string {
 			detail,
 		)
 
+		rowStyle := NormalRowStyle
 		if isCursor {
-			lines = append(lines, CursorRowStyle.Width(width-2).Render(rowContent))
-		} else {
-			lines = append(lines, NormalRowStyle.Width(width-2).Render(rowContent))
+			rowStyle = CursorRowStyle
 		}
+		renderedRow := rowStyle.Render(rowContent)
+		rowParts := strings.Split(renderedRow, "\n")
+		lines = append(lines, rowParts[0])
 	}
 
 	for len(lines) < height {
 		lines = append(lines, "")
 	}
+	if len(lines) > height {
+		lines = lines[:height]
+	}
 
-	return borderStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+	content := strings.Join(lines, "\n")
+	rendered := borderStyle.Width(width).Height(height).Render(content)
+
+	renderedLines := strings.Split(rendered, "\n")
+	expectedHeight := height + 2
+	if len(renderedLines) > expectedHeight {
+		top := renderedLines[0]
+		bottom := renderedLines[len(renderedLines)-1]
+		mid := renderedLines[1 : expectedHeight-1]
+		renderedLines = append(append([]string{top}, mid...), bottom)
+		rendered = strings.Join(renderedLines, "\n")
+	}
+
+	return rendered
 }
 
 // renderFooter produces the keybinding command legend and total selection summary.
 func (m *Model) renderFooter() string {
-	keys := []string{
-		RenderKeyHelp("[Tab]", "pane"),
-		RenderKeyHelp("[Space]", "toggle"),
-		RenderKeyHelp("[a]", "all"),
-		RenderKeyHelp("[s]", "rescan"),
-		RenderKeyHelp("[d]", "dry-run"),
-		RenderKeyHelp("[Enter]", "clean"),
-		RenderKeyHelp("[?]", "info"),
-		RenderKeyHelp("[q]", "quit"),
-	}
-
-	legend := strings.Join(keys, KeyDivider.String())
-
-	summary := fmt.Sprintf("Selected: %s / %s (%d items)",
-		core.FormatBytes(m.TotalSelectedBytes()),
-		core.FormatBytes(m.TotalScannedBytes()),
-		m.TotalSelectedCount(),
-	)
-	summaryStyled := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(summary)
-
 	footWidth := m.width
 	if footWidth < 40 {
 		footWidth = 40
 	}
+
+	var keys []string
+	var summary string
+
+	if footWidth >= 115 {
+		keys = []string{
+			RenderKeyHelp("[Tab]", "pane"),
+			RenderKeyHelp("[Space]", "toggle"),
+			RenderKeyHelp("[a]", "all"),
+			RenderKeyHelp("[s]", "rescan"),
+			RenderKeyHelp("[d]", "dry-run"),
+			RenderKeyHelp("[Enter]", "clean"),
+			RenderKeyHelp("[?]", "info"),
+			RenderKeyHelp("[q]", "quit"),
+		}
+		summary = fmt.Sprintf("Selected: %s / %s (%d items)",
+			core.FormatBytes(m.TotalSelectedBytes()),
+			core.FormatBytes(m.TotalScannedBytes()),
+			m.TotalSelectedCount(),
+		)
+	} else if footWidth >= 85 {
+		keys = []string{
+			RenderKeyHelp("[Tab]", "pane"),
+			RenderKeyHelp("[Space]", "sel"),
+			RenderKeyHelp("[d]", "dry-run"),
+			RenderKeyHelp("[Enter]", "clean"),
+			RenderKeyHelp("[?]", "info"),
+			RenderKeyHelp("[q]", "quit"),
+		}
+		summary = fmt.Sprintf("Sel: %s (%d)",
+			core.FormatBytes(m.TotalSelectedBytes()),
+			m.TotalSelectedCount(),
+		)
+	} else {
+		keys = []string{
+			RenderKeyHelp("[Space]", "sel"),
+			RenderKeyHelp("[d]", "dry"),
+			RenderKeyHelp("[Enter]", "clean"),
+			RenderKeyHelp("[?]", "info"),
+			RenderKeyHelp("[q]", "quit"),
+		}
+		summary = fmt.Sprintf("%s (%d)",
+			core.FormatBytes(m.TotalSelectedBytes()),
+			m.TotalSelectedCount(),
+		)
+	}
+
+	legend := strings.Join(keys, KeyDivider.String())
+	summaryStyled := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(summary)
 
 	gap := footWidth - lipgloss.Width(legend) - lipgloss.Width(summaryStyled) - 4
 	if gap < 1 {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/efzynx/sweep/internal/core"
 )
 
@@ -640,5 +641,59 @@ func TestTUI_GetRootDiskStatsReal(t *testing.T) {
 	_, err = GetDiskStats("/path/that/does/not/exist/sweep/test")
 	if err == nil {
 		t.Errorf("expected error for non-existent path, got nil")
+	}
+}
+
+func TestTUI_StrictViewportHeightConstraint(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+	m.diskStats = DiskStats{
+		TotalBytes:  100 * 1024 * 1024 * 1024,
+		UsedBytes:   50 * 1024 * 1024 * 1024,
+		FreeBytes:   50 * 1024 * 1024 * 1024,
+		UsedPercent: 50.0,
+	}
+
+	heights := []int{20, 24, 30, 40, 60}
+	widths := []int{60, 80, 100, 120, 160}
+
+	for _, h := range heights {
+		for _, w := range widths {
+			m.width = w
+			m.height = h
+
+			header := m.renderHeader()
+			footer := m.renderFooter()
+			hH := lipgloss.Height(header)
+			fH := lipgloss.Height(footer)
+			view := m.View()
+			gotHeight := lipgloss.Height(view)
+			if (w == 120 && h == 40) || (w == 60 && h == 20) || (w == 80 && h == 24) {
+				t.Logf("w=%d h=%d -> headerH=%d footerH=%d totalH=%d", w, h, hH, fH, gotHeight)
+			}
+			if gotHeight > h {
+				t.Errorf("dimension %dx%d: rendered height %d exceeds window height %d", w, h, gotHeight, h)
+			}
+
+			lines := strings.Split(view, "\n")
+			if len(lines) == 0 {
+				t.Fatalf("dimension %dx%d: empty view output", w, h)
+			}
+
+			// First line must contain "SWEEP"
+			if !strings.Contains(lines[0], "SWEEP") {
+				t.Errorf("dimension %dx%d: first line does not contain 'SWEEP': %q", w, h, lines[0])
+			}
+
+			// Must contain disk stats
+			if !strings.Contains(view, "Root (/)") && !strings.Contains(view, "Disk") && !strings.Contains(view, "50.0%") {
+				t.Errorf("dimension %dx%d: view missing disk stats", w, h)
+			}
+		}
 	}
 }
