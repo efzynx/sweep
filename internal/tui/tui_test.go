@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -696,4 +697,198 @@ func TestTUI_StrictViewportHeightConstraint(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestTUI_AllViewModes_HeightInvariant(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+	m.diskStats = DiskStats{
+		TotalBytes:  200 * 1024 * 1024 * 1024,
+		UsedBytes:   120 * 1024 * 1024 * 1024,
+		FreeBytes:   80 * 1024 * 1024 * 1024,
+		UsedPercent: 60.0,
+	}
+
+	modes := []struct {
+		name     string
+		setupMod func(m Model) Model
+	}{
+		{
+			name: "MainSplitView",
+			setupMod: func(m Model) Model {
+				m.viewMode = ViewModeMain
+				return m
+			},
+		},
+		{
+			name: "ModalDryRun",
+			setupMod: func(m Model) Model {
+				m.viewMode = ViewModeModal
+				m.modalType = ModalTypeDryRun
+				return m
+			},
+		},
+		{
+			name: "ModalClean",
+			setupMod: func(m Model) Model {
+				m.viewMode = ViewModeModal
+				m.modalType = ModalTypeClean
+				return m
+			},
+		},
+		{
+			name: "AboutModal",
+			setupMod: func(m Model) Model {
+				m.viewMode = ViewModeAbout
+				return m
+			},
+		},
+		{
+			name: "Executing",
+			setupMod: func(m Model) Model {
+				m.viewMode = ViewModeExecuting
+				m.executingDryRun = false
+				m.executionQueue = []int{0, 1}
+				m.executingStepIdx = 1
+				m.logs = []string{"Cleaning cache...", "Removing orphans...", "Done."}
+				return m
+			},
+		},
+		{
+			name: "Done",
+			setupMod: func(m Model) Model {
+				m.viewMode = ViewModeDone
+				m.cleanedItems = 42
+				m.freedBytes = 1024 * 1024 * 500
+				m.duration = 2 * time.Second
+				m.logs = []string{"Task completed successfully."}
+				return m
+			},
+		},
+	}
+
+	testDimensions := []struct {
+		w, h int
+		desc string
+	}{
+		{54, 13, "Compact threshold boundary"},
+		{55, 14, "Split view minimum boundary"},
+		{60, 20, "Small terminal"},
+		{80, 24, "Standard terminal (80x24)"},
+		{80, 26, "Header constraint boundary high (26 rows)"},
+		{80, 27, "Header unconstrained boundary low (27 rows)"},
+		{120, 30, "Widescreen terminal (120x30)"},
+		{160, 45, "Ultra-wide terminal"},
+		{200, 60, "4K high-resolution terminal"},
+	}
+
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			modeModel := mode.setupMod(m)
+			for _, dim := range testDimensions {
+				modeModel.width = dim.w
+				modeModel.height = dim.h
+
+				view := modeModel.View()
+				gotH := lipgloss.Height(view)
+
+				if gotH > dim.h {
+					t.Errorf("[%s] %s (%dx%d): height %d exceeds max %d", mode.name, dim.desc, dim.w, dim.h, gotH, dim.h)
+				}
+
+				// Check trailing newline: view must not end with extra empty lines exceeding height
+				lines := strings.Split(view, "\n")
+				if len(lines) > dim.h {
+					t.Errorf("[%s] %s (%dx%d): line count %d exceeds height %d", mode.name, dim.desc, dim.w, dim.h, len(lines), dim.h)
+				}
+			}
+		})
+	}
+}
+
+func TestTUI_HeaderVisibilityAndBanner(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+	m.diskStats = DiskStats{
+		TotalBytes:  500 * 1024 * 1024 * 1024,
+		UsedBytes:   250 * 1024 * 1024 * 1024,
+		FreeBytes:   250 * 1024 * 1024 * 1024,
+		UsedPercent: 50.0,
+	}
+
+	dimensions := [][2]int{
+		{60, 20},
+		{80, 24},
+		{120, 30},
+		{100, 25},
+		{160, 40},
+	}
+
+	for _, dim := range dimensions {
+		w, h := dim[0], dim[1]
+		m.width = w
+		m.height = h
+
+		view := m.View()
+		lines := strings.Split(view, "\n")
+
+		if len(lines) < 4 {
+			t.Fatalf("dimension %dx%d: view has too few lines (%d)", w, h, len(lines))
+		}
+
+		// Line 0 MUST contain "SWEEP"
+		if !strings.Contains(lines[0], "SWEEP") {
+			t.Errorf("dimension %dx%d: line 0 missing SWEEP banner: %q", w, h, lines[0])
+		}
+
+		// Lines 0..3 MUST contain "Root (/)" disk usage meter
+		headerText := strings.Join(lines[:4], "\n")
+		if !strings.Contains(headerText, "Root (/)") {
+			t.Errorf("dimension %dx%d: lines 0..3 missing 'Root (/)': %q", w, h, headerText)
+		}
+		if !strings.Contains(headerText, "50.0%") {
+			t.Errorf("dimension %dx%d: lines 0..3 missing '50.0%%': %q", w, h, headerText)
+		}
+	}
+}
+
+func TestTUI_ConcurrentResizeAndRenderRace(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+
+	// Rapidly send window size updates and render View() concurrently
+	var wg sync.WaitGroup
+	dimensions := [][2]int{
+		{80, 24}, {120, 30}, {60, 20}, {100, 25}, {160, 45}, {55, 14}, {70, 22},
+	}
+
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			dim := dimensions[idx%len(dimensions)]
+			currM := m
+			updatedM, _ := currM.Update(tea.WindowSizeMsg{Width: dim[0], Height: dim[1]})
+			view := updatedM.(Model).View()
+			if lipgloss.Height(view) > dim[1] {
+				t.Errorf("concurrent test %dx%d: rendered height %d > %d", dim[0], dim[1], lipgloss.Height(view), dim[1])
+			}
+		}(i)
+	}
+	wg.Wait()
 }

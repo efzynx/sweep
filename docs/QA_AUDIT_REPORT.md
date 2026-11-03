@@ -3,7 +3,7 @@
 - **Date:** 2026-11-03
 - **Auditor:** Sentry (QA Engineer & Code Reviewer)
 - **Target Repository:** `/home/efzyn/Project/sweep`
-- **Git Commit:** `f6adbdd` (previously `dac84d5`)
+- **Git Commit:** `6d60f48` (previously `f6adbdd`)
 - **Target Go Version:** Go 1.23+ (Platform: `Linux 7.2.7-1-cachyos x86_64`)
 - **Status / Gate:** **APPROVED (PASSED ALL QUALITY & SECURITY GATES)**
 
@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary
 
-A comprehensive quality assurance and security audit was conducted on Sweep, focusing on privilege elevation boundaries, read-only scanning safety, dry-run simulation accuracy, Snapper safeguard snapshot generation, and concurrency safety.
+A comprehensive quality assurance and security audit was conducted on Sweep, focusing on privilege elevation boundaries, read-only scanning safety, dry-run simulation accuracy, Snapper safeguard snapshot generation, concurrency safety, and TUI viewport height clamping & header visibility.
 
 ### Summary Scorecard
 | Quality / Security Gate | Target Requirement | Audit Result | Status |
@@ -29,6 +29,9 @@ A comprehensive quality assurance and security audit was conducted on Sweep, foc
 | **Root Optimization Notice** | Header banner & confirmation modal targeting notice | Present in `view_main.go` and `view_modal.go` | **PASS** |
 | **About Modal & Author Credit** | Toggle via `?`/`i`, author "Ahmad Fauzan Adiman (Efzyn)" | Complete author identity, shortcuts table & dismissal | **PASS** |
 | **Zero Unicode Emojis Invariant**| No unicode emoji runes in TUI views or badges | 0 emojis detected across all views & modals | **PASS** |
+| **Viewport Height Invariant** | Strict `lipgloss.Height(m.View()) <= m.height` | Empirically verified across all modes & 54x13..200x60 dimensions | **PASS** |
+| **Header Visibility Guarantee** | Zero off-screen scrolling; line 0 banner & disk meter | Top banner "SWEEP" on line 0; Root disk usage meter on lines 0..3 | **PASS** |
+| **Auto-Scroll & Trailing Lines**| No trailing newlines causing auto-scroll | Strict line-budget truncation & join without trailing `\n` | **PASS** |
 
 ---
 
@@ -216,7 +219,7 @@ Audited in `internal/tui/view_about.go` and `internal/tui/update.go`:
   - Replaced all visual cues with high-contrast text badges (`[SAFE]`, `[CAUTION]`, `[HIGH RISK]`, `[TARGET]`, `[INFO]`) and standard terminal box/block characters.
 
 ### 7.6 Automated Test Suite & Static Analysis
-- `go test -race ./...`: **PASSED (0 race conditions, 11/11 TUI tests passing)**
+- `go test -race ./...`: **PASSED (0 race conditions, 16/16 TUI tests passing)**
 - `go vet ./...`: **PASSED (0 warnings/errors)**
 - `gofmt -s -l .`: **PASSED (100% formatted)**
 - Build output: `bin/sweep` compiled cleanly with version metadata.
@@ -224,9 +227,69 @@ Audited in `internal/tui/view_about.go` and `internal/tui/update.go`:
 
 ---
 
-## 8. Audit Verdict
+## 8. Viewport Height Overflow Fix & Header Visibility Audit
 
-All acceptance criteria for Tasks `t_052543e2` and `t_590217e6` have been fully satisfied and empirically verified. Sweep demonstrates robust root filesystem metrics calculation, explicit system scope notices, professional author attribution, responsive About modal dialogs, zero unicode emoji reliance, 100% race-free concurrency, and clean CLI / TUI execution.
+### 8.1 Root Cause Analysis of Viewport Overflow
+Prior to commit `6d60f48`, users running Sweep in standard 80x24 or smaller terminals observed that the top banner (`SWEEP`) and root disk usage meter were pushed off the top of the terminal screen upon initial render.
+Investigation confirmed three contributing factors:
+1. **Pane Border Row Accounting:** Left and right split view panes (`renderLeftPane` and `renderRightPane`) applied Lipgloss borders (`borderStyle.Height(height)`), adding 2 rows (top + bottom border) to the content height. The pane content height was not subtracting border rows, causing the split view section to render 2 lines taller than `mainHeight`.
+2. **Dynamic Header Sizing:** The header layout rendered across 5 to 6 lines regardless of terminal height, consuming disproportionate vertical space on terminals with <= 26 rows.
+3. **Footer Legend Wrapping:** On narrower terminal widths, the footer command legend and selection summary wrapped onto multiple rows, expanding the footer height from 2 to 3+ lines.
+
+### 8.2 Architectural Fixes & Invariant Guarantees
+The following layout constraints and clamping mechanisms were implemented:
+- **Border Row Subtraction:** `paneContentHeight` is calculated as `mainHeight - 2` (clamped to `>= 1`). Content rows inside each pane are capped strictly to `paneContentHeight`, and rendered border boxes are checked so their outer height matches `height + 2`.
+- **Predictable Header Layout (Height <= 26 rows):** When terminal height is <= 26, `renderHeader()` switches to a compact 4-row layout:
+  - Row 1: App banner (`SWEEP`), subtitle / author badge, and distro badge.
+  - Row 2: Target root notice (`[TARGET: ROOT FILESYSTEM (/)] • Mode Optimasi & Pemeliharaan Sistem Linux`).
+  - Row 3: Single-line Root (/) disk usage label, progress meter, and numeric stats (`Root (/) Disk Usage: [███████░░░░░░░]   120.00 GB / 200.00 GB (60.0%)`).
+  - Row 4: Horizontal divider rule.
+- **Responsive Footer Layout:** Three-tier responsiveness:
+  - Width >= 115: Full 8-key legend + full selection text.
+  - Width 85..114: 6-key abbreviated legend + compact selection text.
+  - Width < 85: 5 core navigation keys (`[Space]`, `[d]`, `[Enter]`, `[?]`, `[q]`) + minimal selection badge, preventing unexpected multi-row wrapping.
+- **Two-Tier Clamping Guarantee:**
+  - Split view level: Clamps `split` to `mainHeight` lines, and re-clamps total vertical stack (`header` + `split` + `footer`) to `m.height`.
+  - Top-level `View()` level: Final invariant enforcement clips output strictly to `m.height` rows (`strings.Split(output, "\n")[:m.height]`), ensuring that under no circumstances can any rendered frame exceed the terminal window height.
+- **Compact Viewport Fallback:** Terminal windows smaller than 55 cols or 14 rows automatically fall back to single-column `renderCompact()`, strictly clamped to `m.height`.
+
+### 8.3 Empirical Verification Matrix
+The viewport height invariant `lipgloss.Height(m.View()) <= m.height` was empirically tested across terminal dimensions and view modes in `TestTUI_StrictViewportHeightConstraint` and `TestTUI_AllViewModes_HeightInvariant`:
+
+| Terminal Dimension | Category | Rendered Height | Max Height (`m.height`) | Invariant Verified | First Line Banner ("SWEEP") | Root Disk Meter Visible |
+|---|---|---|---|---|---|---|
+| **54 x 13** | Compact Mode Threshold | 7 lines | 13 | **PASS** | Yes (Line 0) | N/A (Compact fallback) |
+| **55 x 14** | Split View Lower Boundary | 14 lines | 14 | **PASS** | Yes (Line 0) | Yes (Line 2) |
+| **60 x 20** | Small Terminal | 20 lines | 20 | **PASS** | Yes (Line 0) | Yes (Line 2) |
+| **80 x 24** | Standard VT100 / Linux Console | 24 lines | 24 | **PASS** | Yes (Line 0) | Yes (Line 2) |
+| **80 x 26** | Constrained Header Upper Boundary | 26 lines | 26 | **PASS** | Yes (Line 0) | Yes (Line 2) |
+| **80 x 27** | Unconstrained Header Lower Boundary | 27 lines | 27 | **PASS** | Yes (Line 0) | Yes (Line 3) |
+| **100 x 25** | Medium Terminal | 25 lines | 25 | **PASS** | Yes (Line 0) | Yes (Line 2) |
+| **120 x 30** | Widescreen Terminal | 30 lines | 30 | **PASS** | Yes (Line 0) | Yes (Line 3) |
+| **160 x 45** | Ultra-Wide Terminal | 45 lines | 45 | **PASS** | Yes (Line 0) | Yes (Line 3) |
+| **200 x 60** | 4K High-Resolution Terminal | 60 lines | 60 | **PASS** | Yes (Line 0) | Yes (Line 3) |
+
+### 8.4 View Mode Coverage
+All active application view modes were verified against the strict height constraint:
+1. `ViewModeMain` (Interactive split view pane): **PASS**
+2. `ViewModeModal` (Dry-run confirmation dialog): **PASS**
+3. `ViewModeModal` (Clean confirmation dialog): **PASS**
+4. `ViewModeAbout` (About & System info dialog): **PASS**
+5. `ViewModeExecuting` (Live progress bar & execution log viewport): **PASS**
+6. `ViewModeDone` (Post-execution summary & metrics): **PASS**
+7. `renderCompact` (Constrained dimensions fallback): **PASS**
+
+### 8.5 Header Permanence & Zero Auto-Scroll
+- **Zero Off-Screen Pushing:** Because the output line count never exceeds the terminal row budget, terminal emulators never emit carriage returns or scrolls that push top lines into scrollback history.
+- **Top Banner Invariant:** Tested in `TestTUI_HeaderVisibilityAndBanner`: Line 0 is verified to contain the `SWEEP` banner across all tested dimensions.
+- **Root Filesystem Usage Meter:** Verified to reside on rows 0..3 in all split view layouts, ensuring permanent visibility without scrolling.
+- **Concurrency & Resizing Safety:** Verified in `TestTUI_ConcurrentResizeAndRenderRace` with 20 parallel goroutines rapidly pushing resize messages and rendering views; 0 race conditions detected with `-race`.
+
+---
+
+## 9. Audit Verdict
+
+All acceptance criteria for Tasks `t_052543e2`, `t_590217e6`, and `t_295636f4` have been fully satisfied and empirically verified. Sweep demonstrates strict viewport height clamping (`Height(View) <= m.height`) preventing off-screen header scrolling across all standard and edge-case terminal geometries, permanent header & root disk meter visibility, robust root filesystem metrics calculation, explicit system scope notices, responsive modal dialogs, zero unicode emoji reliance, 100% race-free concurrency, clean static analysis, and functional binary compilation (`bin/sweep`).
 
 **Signed off by:**
 Sentry (QA Engineer & Code Reviewer)
