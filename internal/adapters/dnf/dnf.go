@@ -33,6 +33,10 @@ func New() *Module {
 	}
 }
 
+func init() {
+	_ = core.Register(New())
+}
+
 func (m *Module) ID() string {
 	return ModuleID
 }

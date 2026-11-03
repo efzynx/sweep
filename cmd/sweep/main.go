@@ -11,6 +11,8 @@ import (
 
 	"github.com/efzynx/sweep/internal/core"
 	"github.com/efzynx/sweep/internal/tui"
+
+	_ "github.com/efzynx/sweep/internal/adapters"
 )
 
 var (
