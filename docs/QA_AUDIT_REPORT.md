@@ -3,7 +3,7 @@
 - **Date:** 2026-11-03
 - **Auditor:** Sentry (QA Engineer & Code Reviewer)
 - **Target Repository:** `/home/efzyn/Project/sweep`
-- **Git Commit:** `6d60f48` (previously `f6adbdd`)
+- **Git Commit:** `81e3892` (previously `6d60f48`)
 - **Target Go Version:** Go 1.23+ (Platform: `Linux 7.2.7-1-cachyos x86_64`)
 - **Status / Gate:** **APPROVED (PASSED ALL QUALITY & SECURITY GATES)**
 
@@ -11,30 +11,34 @@
 
 ## 1. Executive Summary
 
-A comprehensive quality assurance and security audit was conducted on Sweep, focusing on privilege elevation boundaries, read-only scanning safety, dry-run simulation accuracy, Snapper safeguard snapshot generation, concurrency safety, and TUI viewport height clamping & header visibility.
+A comprehensive quality assurance and security audit was conducted on Sweep, focusing on privilege elevation boundaries, read-only scanning safety, dry-run simulation accuracy, Snapper safeguard snapshot generation, concurrency safety, TUI viewport height clamping & header visibility, and Phase 2 advanced subsystem adapters (Developer Caches, Desktop & Browser Caches, Systemd Journal Logs, and Multi-Distro Package Managers: APT, DNF, Snap).
 
 ### Summary Scorecard
 | Quality / Security Gate | Target Requirement | Audit Result | Status |
 |---|---|---|---|
 | **Privilege Escalation in Scan** | Zero `sudo`/`pkexec` during scan | 0 elevation calls; strictly read-only non-root scan | **PASS** |
 | **Command Injection Safety** | Zero `sh -c` / `bash -c` string formatting | 100% parameterized `exec.CommandContext(ctx, name, args...)` | **PASS** |
-| **Elevation Contract (`RequiresElevation`)** | True only for root operations | pacman, apt, dnf, snapper = true; docker, flatpak = false | **PASS** |
+| **Elevation Contract (`RequiresElevation`)** | True only for root operations | pacman, apt, dnf, snapper, snap, journal = true; docker, flatpak, devcache, usercache, custom = false | **PASS** |
 | **Snapper Safeguard Snapshot** | Pre-clean snapshot created before destructive clean | Verified; triggers pre-clean snapshot; protects snapshot 0 | **PASS** |
-| **Dry-Run Accuracy & Safety** | Zero file deletions; exact byte/count equivalence | 37 items (11.88 GB) scanned == 11.88 GB simulated; 0 deletions | **PASS** |
-| **Concurrency & Race Detection** | `go test -race ./...` | 0 race conditions detected across all packages | **PASS** |
+| **Dry-Run Accuracy & Safety** | Zero file deletions; exact byte/count equivalence | 38 items (15.25 GB) scanned == 15.25 GB simulated; 0 deletions | **PASS** |
+| **Concurrency & Race Detection** | `go test -race ./...` | 0 race conditions detected across all 11 packages | **PASS** |
 | **Go Static Analysis & Lint** | `go vet ./...` & `gofmt -s -l .` | Clean output; 0 errors or formatting discrepancies | **PASS** |
-| **End-to-End Integration Suite** | Scanner -> Registry -> Selection -> Dry-Run -> Clean | Tested & verified in `internal/core/integration_test.go` | **PASS** |
+| **End-to-End Integration Suite** | Scanner -> Registry -> Selection -> Dry-Run -> Clean | Comprehensive suite in `internal/core/integration_test.go` | **PASS** |
 | **Binary Build Verification** | CLI build with ldflags & flags execution | Native (`bin/sweep`) and cross-compile (amd64, arm64) functional | **PASS** |
+| **Dev Caches Non-Root Safety** | Zero elevation; npm, go, cargo, pip, uv caches | Read-only scan, target dirs preserved, read-only chmod unlinking | **PASS** |
+| **Browser Profile Preservation** | Zero profile data loss (bookmarks, cookies, passwords) | Caches unlinked, profile DBs (`places.sqlite`, etc.) 100% intact | **PASS** |
+| **Browser Lock Protection** | Skip cleaning active/locked browser profiles | Verified `.parentlock` skips Firefox cache cleanup safely | **PASS** |
+| **Systemd Journal Vacuum** | Elevation required, parameterized retention & size | Parameterized `journalctl --vacuum-time/--vacuum-size`, 0 shell strings | **PASS** |
+| **Snap Disabled Revisions** | Elevation required, safe revision parsing | Parameterized `snap remove <name> --revision=<rev>` | **PASS** |
 | **Root Disk Storage Metrics** | Real `statvfs` calculations (Total, Free, Used) | Exact byte math & percentage bar without emojis | **PASS** |
 | **Root Optimization Notice** | Header banner & confirmation modal targeting notice | Present in `view_main.go` and `view_modal.go` | **PASS** |
 | **About Modal & Author Credit** | Toggle via `?`/`i`, author "Ahmad Fauzan Adiman (Efzyn)" | Complete author identity, shortcuts table & dismissal | **PASS** |
 | **Zero Unicode Emojis Invariant**| No unicode emoji runes in TUI views or badges | 0 emojis detected across all views & modals | **PASS** |
 | **Viewport Height Invariant** | Strict `lipgloss.Height(m.View()) <= m.height` | Empirically verified across all modes & 54x13..200x60 dimensions | **PASS** |
 | **Header Visibility Guarantee** | Zero off-screen scrolling; line 0 banner & disk meter | Top banner "SWEEP" on line 0; Root disk usage meter on lines 0..3 | **PASS** |
-| **Auto-Scroll & Trailing Lines**| No trailing newlines causing auto-scroll | Strict line-budget truncation & join without trailing `\n` | **PASS** |
 | **Concept 2 Nordic Minimalist TUI**| Telescope statusline, tree subsystems, tabular inspector, bullet footer | Verified & matching approved mockup; clean Nordic palette (#263449) | **PASS** |
 | **Statusline Height Bound**   | Strictly 2 rows (>=90 cols), 3 rows (<90 cols) | Empirically verified across all viewport widths; zero overflow | **PASS** |
-| **Subsystem Tree Grouping**   | Box-drawing tree glyphs (`├─`, `└─`) & category priority rank | Categorized (pkg, containers, filesystem) with clean indentation | **PASS** |
+| **Subsystem Tree Grouping**   | Box-drawing tree glyphs (`├─`, `└─`) & category priority rank | Categorized across all 6 Phase 2 groups with clean indentation | **PASS** |
 
 ---
 
@@ -345,14 +349,128 @@ Empirically validated through unit tests in `internal/tui/tui_test.go`:
 
 ---
 
-## 10. Audit Verdict
+## 10. Phase 2 Multi-Distro & Advanced Caches Audit (Task t_058228eb)
 
-All acceptance criteria for Tasks `t_052543e2`, `t_590217e6`, `t_295636f4`, and `t_fb1dfbd7` have been fully satisfied and empirically verified. Sweep demonstrates:
-1. Complete fidelity to Concept 2 "Nordic Minimalist" with the Telescope-style statusline, tree-structured Subsystems pane (`├─`/`└─`), tabular Item Inspector, and bullet-separated footer.
-2. Strict viewport height clamping (`lipgloss.Height(m.View()) <= m.height`) preventing off-screen scrolling across all terminal geometries (54x13 up to 200x60).
-3. Zero unicode emoji reliance, employing high-contrast text badges and clean box-drawing glyphs.
-4. Robust read-only scanning safety, zero shell interpolation (`sh -c`/`bash -c`), parameterised execution, and safe dry-run simulation.
-5. 100% race-free concurrency, clean static analysis (`go vet`, `gofmt`), and clean production binary compilation (`bin/sweep`).
+### 10.1 Phase 2 Architecture & Subsystem Expansion
+Phase 2 expanded Sweep into a complete, modular Linux maintenance powerhouse covering 6 distinct subsystem categories and 11 production adapters:
+1. **DEVELOPER CACHES (`devcache`):** Node.js (`npm`, `yarn`, `pnpm`), Go (`go-build`, `go-mod`), Rust (`cargo-registry`, `cargo-git`), and Python (`pip`, `uv`).
+2. **SYSTEM & DESKTOP (`usercache`, `journal`):** Desktop Trash Can (`~/.local/share/Trash`), Thumbnail cache (`~/.cache/thumbnails`), Browser HTTP caches (Firefox, Chromium, Google Chrome), Idle application logs (`~/.local/state`), and Systemd journal logs vacuuming.
+3. **PACKAGE MANAGERS (`pacman`, `apt`, `dnf`):** Arch/CachyOS (`pacman`), Debian/Ubuntu (`apt`), and Fedora/RHEL (`dnf`).
+4. **SANDBOXED APPS & CONTAINERS (`docker`, `flatpak`, `snap`):** Docker dangling volumes/containers, Flatpak unneeded runtimes & app caches, and Snap disabled revisions.
+5. **FILESYSTEM & SNAPSHOTS (`snapper`):** Btrfs Snapper snapshot cleanup with automated pre-clean safeguard snapshots.
+6. **USER CUSTOM RULES (`custom`):** User-defined glob and directory cleanup rules via `~/.config/sweep/config.yaml`.
+
+### 10.2 Privilege Elevation & Security Audit
+Every Phase 2 adapter was evaluated against strict least-privilege standards:
+- **Non-Root Scanning Invariant:**
+  - `devcache.Scan()`, `usercache.Scan()`, `custom.Scan()`, `flatpak.Scan()`, `docker.Scan()`, `snap.Scan()`, and `journal.Scan()` operate strictly under unprivileged user permissions.
+  - Scanning does not trigger `sudo`, `pkexec`, or setuid helpers. Read errors on inaccessible subdirectories are handled gracefully.
+- **Elevation Requirement Matrix (`RequiresElevation`):**
+  | Subsystem Adapter | Declared Elevation | Rationale & Security Boundary |
+  |---|---|---|
+  | `devcache` | `false` | User-owned developer caches in `$HOME` |
+  | `usercache` | `false` | User-owned trash, thumbnails, browser caches in `$HOME` |
+  | `custom` | `false` | User-configured scan paths |
+  | `docker` | `false` | Operates through standard user Docker socket / group |
+  | `flatpak` | `false` | User-installed runtimes and user cache trees |
+  | `pacman` | `true` | System package database and root cache (`/var/cache/pacman/pkg`) |
+  | `apt` | `true` | Root package archives (`/var/cache/apt/archives`) and dpkg orphan removal |
+  | `dnf` | `true` | System RPM database and root cache (`/var/cache/dnf`) |
+  | `snap` | `true` | System snapd revisions (`/var/lib/snapd/snaps`) |
+  | `journal` | `true` | Systemd journal log vacuuming across system logs (`/var/log/journal`) |
+  | `snapper` | `true` | Root filesystem Btrfs subvolumes and snapshot management |
+- **Zero Shell Interpolation (`sh -c` / `bash -c`):**
+  - Confirmed 0 occurrences across the codebase.
+  - 100% of external processes are invoked via parameterized argument slices `exec.CommandContext(ctx, name, args...)`.
+  - Snap: `snap remove <name> --revision=<rev>`
+  - Journal: `journalctl --vacuum-time=<retention> --vacuum-size=<size>`
+  - APT: `apt-get clean`, `apt-get autoclean`, `apt-get autoremove -y`
+  - DNF: `dnf clean all`, `dnf remove <kernel...>`
+
+### 10.3 Browser Profile Preservation & Data Safety Guardrails
+A dedicated security audit was performed on browser cache cleaning in `internal/adapters/usercache`:
+- **Strict Distinction Between Cache and Profile Data:**
+  - Firefox: Cleans strictly `cache2/entries` within `~/.cache/mozilla/firefox/<profile>/cache2`. Critical user profile databases located in `~/.mozilla/firefox/<profile>/` (`places.sqlite` [bookmarks & history], `key4.db` [credentials & logins], `prefs.js` [user preferences]) are **never touched or scanned**.
+  - Chromium & Google Chrome: Cleans strictly `Cache`, `Code Cache`, `GPUCache` subdirectories within `~/.cache/chromium/` or `~/.cache/google-chrome/`. User data directories (`~/.config/chromium/Default/Bookmarks`, `Cookies`, `Preferences`) are **never unlinked or modified**.
+- **Active Lock Detection:**
+  - If a browser profile has an active lockfile (`.parentlock`, `parent.lock`, or `lock`), `usercache.Clean()` automatically detects the locked state and skips cleaning that profile with an explicit warning: `"skipped Firefox cache for profile ...: browser is locked/running"`.
+  - Empirically verified in automated test `TestIntegration_Phase2_Usercache_BrowserProfilesAndTrashPreserved`.
+
+### 10.4 Empirical Dry-Run Equivalence (Host Verification)
+A live host dry-run was executed against the developer environment:
+```bash
+$ bin/sweep --dry-run
+```
+**Host Scan Summary:**
+- `[devcache]`: 7 items totaling 13.21 GB (npm 7.00 GB, pnpm 3.68 GB, Go build 934.61 MB, uv 1.46 GB, Go mod 103.32 MB, pip 36.91 MB, Cargo 22.54 MB)
+- `[usercache]`: 11 items totaling 1.55 GB (Trash 380.57 MB, Thumbnails 35.62 MB, Firefox cache2 1.13 GB across 3 profiles, Chromium cache 35.84 MB, 5 pipx logs)
+- `[docker]`: 8 items totaling 412.82 MB (unused volumes)
+- `[flatpak]`: 11 items totaling 72.62 MB (application caches)
+- `[pacman]`: 1 item totaling 11.37 MB (broken download `.part`)
+- **Total Scanned:** 38 cleanable items totaling **15.25 GB** in 1.54s
+
+**Dry-Run Simulation Output:**
+```text
+Simulating Dry-Run Cleanup...
+[devcache] Simulated freed: 13.21 GB (7 items cleaned)
+[docker] Simulated freed: 412.82 MB (8 items cleaned)
+[flatpak] Simulated freed: 72.62 MB (11 items cleaned)
+[pacman] Simulated freed: 11.37 MB (1 items cleaned)
+[usercache] Simulated freed: 1.55 GB (11 items cleaned)
+
+Dry-run complete. Total space reclaimable: 15.25 GB
+```
+**Data Preservation Audit:**
+All 38 items were audited on disk after dry-run:
+- `/var/cache/pacman/pkg/linux-cachyos-lts-6.18.50-1-x86_64.pkg.tar.zst.part` remains untouched (11,923,456 bytes).
+- `/home/efzyn/.local/share/Trash` remains untouched (15,592 items).
+- `/home/efzyn/.npm/_cacache` remains untouched (15,158 files).
+- `/home/efzyn/.cache/thumbnails` remains untouched (2,037 files).
+- **Exact Equivalence Verified:** 15.25 GB scanned == 15.25 GB simulated; **0 files deleted**.
+
+### 10.5 Phase 2 Integration Test Suite (`internal/core/integration_test.go`)
+Comprehensive end-to-end integration tests were authored and validated:
+1. `TestIntegration_Phase2_Devcache_DryRunAndCleanEquivalence`:
+   - Validates npm, go-build, go-mod, cargo, pip, and uv.
+   - Asserts non-root elevation, exact dry-run byte equivalence, safe read-only chmod handling, and preservation of parent cache directories on clean.
+2. `TestIntegration_Phase2_Usercache_BrowserProfilesAndTrashPreserved`:
+   - Validates Trash, Thumbnails, Firefox cache2, Chromium cache, and old logs.
+   - Asserts zero deletion in dry run.
+   - In real clean: asserts cache files are removed while `places.sqlite`, `key4.db`, `prefs.js`, `Bookmarks`, and `Cookies` are 100% preserved.
+   - Asserts `.parentlock` presence blocks cache deletion.
+3. `TestIntegration_Phase2_Journal_ElevationAndParameterizedClean`:
+   - Asserts `RequiresElevation() == true`.
+   - Asserts dry run invokes 0 commands.
+   - Asserts clean invokes parameterized `journalctl --vacuum-time=... --vacuum-size=...`.
+4. `TestIntegration_Phase2_Snap_ElevationAndParameterizedClean`:
+   - Asserts `RequiresElevation() == true`.
+   - Asserts disabled revision detection from `snap list --all`.
+   - Asserts parameterized `snap remove <name> --revision=<rev>`.
+5. `TestIntegration_Phase2_AptAndDnf_ElevationAndParameterizedExecution`:
+   - Asserts both package managers declare elevation required.
+   - Asserts dry-run invokes 0 commands.
+   - Asserts parameterized executions (`apt-get clean`, `apt-get autoremove -y`, `dnf clean all`).
+
+### 10.6 Automated Test Suite, Concurrency & Release Build
+- **Race Detector (`go test -race ./...`):**
+  - Executed across all 11 packages and integration suite.
+  - **Outcome:** 100% passing; **0 race conditions detected**.
+- **Static Analysis (`go vet ./...` & `gofmt -s -l .`):**
+  - **Outcome:** Clean; 0 warnings, 0 errors, 100% compliant formatting.
+- **Production Build (`make build`):**
+  - Compiled `bin/sweep` with version metadata:
+    `sweep version 81e3892-dirty (commit: 81e3892, built: 2026-11-03T09:15:53Z)`
+
+---
+
+## 11. Audit Verdict
+
+All acceptance criteria for Phase 2 QA & Security Audit (Task `t_058228eb`) and preceding tasks (`t_052543e2`, `t_590217e6`, `t_295636f4`, `t_fb1dfbd7`, `t_973fdd27`) have been fully satisfied and empirically verified. Sweep demonstrates:
+1. Complete Phase 2 multi-distro and advanced cache support covering all 6 subsystem categories (Package Managers, Containers, Dev Caches, System & Desktop, Filesystem, Custom Rules).
+2. Strict non-root scanning across all user caches, with zero privilege escalation during scanning and explicit `RequiresElevation()` declarations.
+3. Guaranteed browser user data preservation (`places.sqlite`, `Bookmarks`, `Cookies`, `key4.db`) and active profile lock protection.
+4. Exact dry-run simulation accuracy (15.25 GB scanned == 15.25 GB simulated, 0 files modified).
+5. 100% race-free concurrency under `go test -race ./...`, clean static analysis (`go vet`, `gofmt`), and clean release binary compilation (`bin/sweep`).
 
 **Signed off by:**
 Sentry (QA Engineer & Code Reviewer)

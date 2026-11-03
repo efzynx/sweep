@@ -120,4 +120,3 @@ func HasSnap() bool {
 	_, ok := LookPath("snap")
 	return ok
 }
-

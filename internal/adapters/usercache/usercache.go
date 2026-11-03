@@ -325,11 +325,11 @@ func (m *Module) scanFirefox(ctx context.Context) ([]core.CleanableItem, error) 
 				Safety:      core.SafetySafe,
 				ModTime:     mod,
 				Metadata: map[string]string{
-					"type":         "browser_cache",
-					"browser":      "firefox",
-					"profile":      profileName,
-					"locked":       fmt.Sprintf("%t", locked),
-					"cache2_path":  cache2Dir,
+					"type":        "browser_cache",
+					"browser":     "firefox",
+					"profile":     profileName,
+					"locked":      fmt.Sprintf("%t", locked),
+					"cache2_path": cache2Dir,
 				},
 			})
 		}
