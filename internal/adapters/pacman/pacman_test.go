@@ -86,6 +86,7 @@ func TestPacmanModule_ScanCacheAndBrokenDownloads(t *testing.T) {
 	_ = os.WriteFile(broken2, []byte("broken2"), 0644)
 
 	m := New()
+	m.SetAvailable(true)
 	m.SetCacheDir(tmpDir)
 	m.SetAURDirs(nil)
 	m.SetCommandRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -144,6 +145,7 @@ func TestPacmanModule_ScanOrphansAndAUR(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(paruCloneDir, "antigravity", "PKGBUILD"), []byte("pkgbuild content"), 0644)
 
 	m := New()
+	m.SetAvailable(true)
 	m.SetCacheDir(cacheDir)
 	m.SetAURDirs([]string{paruCloneDir})
 

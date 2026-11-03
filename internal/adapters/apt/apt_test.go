@@ -28,9 +28,16 @@ func TestAptModuleContract(t *testing.T) {
 		t.Error("expected RequiresElevation() to be true")
 	}
 
-	// On host system (CachyOS), apt is not installed
-	if m.IsAvailable() {
-		t.Error("expected IsAvailable() to be false on CachyOS host")
+	// Verify IsAvailable matches runtime host detection
+	cur := distro.Current()
+	if cur.IsDebian() || distro.HasApt() {
+		if !m.IsAvailable() {
+			t.Error("expected IsAvailable() to be true on Debian/Ubuntu host")
+		}
+	} else {
+		if m.IsAvailable() {
+			t.Error("expected IsAvailable() to be false on non-Debian host without apt")
+		}
 	}
 }
 
@@ -241,8 +248,12 @@ func TestAptContextCancellation(t *testing.T) {
 
 func TestAptIsAvailableDistroFamily(t *testing.T) {
 	m := New()
-	// When apt is not on path and not debian family, returns false
+	m.SetAvailable(true)
+	if !m.IsAvailable() {
+		t.Error("expected IsAvailable() to be true when explicitly overridden")
+	}
+	m.SetAvailable(false)
 	if m.IsAvailable() {
-		t.Error("expected IsAvailable() to be false on non-Debian host without apt")
+		t.Error("expected IsAvailable() to be false when explicitly overridden")
 	}
 }

@@ -36,9 +36,10 @@ type CommandRunner func(ctx context.Context, name string, args ...string) ([]byt
 
 // Module implements core.Module for Btrfs Snapper snapshot management.
 type Module struct {
-	mountsPath    string
-	commandRunner CommandRunner
-	configs       []string
+	mountsPath        string
+	commandRunner     CommandRunner
+	configs           []string
+	availableOverride *bool
 }
 
 // New creates and returns a new Snapper module instance.
@@ -72,7 +73,15 @@ func (m *Module) Description() string {
 	return ModuleDesc
 }
 
+// SetAvailable overrides IsAvailable for testing purposes.
+func (m *Module) SetAvailable(available bool) {
+	m.availableOverride = &available
+}
+
 func (m *Module) IsAvailable() bool {
+	if m.availableOverride != nil {
+		return *m.availableOverride
+	}
 	if !distro.HasSnapper() {
 		return false
 	}

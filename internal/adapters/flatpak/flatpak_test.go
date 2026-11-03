@@ -45,6 +45,7 @@ func TestFlatpakModule_Scan(t *testing.T) {
 
 	m := New()
 	m.SetVarAppDir(tempVarApp)
+	m.SetAvailable(true)
 
 	mockRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		cmdStr := strings.Join(args, " ")

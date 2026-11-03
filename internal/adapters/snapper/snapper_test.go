@@ -79,6 +79,7 @@ func TestSnapperModule_SafeguardSnapshotHook(t *testing.T) {
 
 func TestSnapperModule_ScanAndClassify(t *testing.T) {
 	m := New()
+	m.SetAvailable(true)
 	m.SetConfigs([]string{"root"})
 
 	now := time.Now()
@@ -325,6 +326,7 @@ func TestSnapperModule_CleanAndSafeguard(t *testing.T) {
 
 func TestSnapperModule_PermissionDiagnostics(t *testing.T) {
 	m := New()
+	m.SetAvailable(true)
 	m.SetConfigs([]string{"root"})
 
 	// Simulate unprivileged execution where snapper returns "No permissions."
@@ -357,6 +359,7 @@ func TestSnapperModule_PermissionDiagnostics(t *testing.T) {
 
 func TestSnapperModule_PrivilegedRootScanSucceeds(t *testing.T) {
 	m := New()
+	m.SetAvailable(true)
 	m.SetConfigs([]string{"root"})
 
 	now := time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02 15:04:05")

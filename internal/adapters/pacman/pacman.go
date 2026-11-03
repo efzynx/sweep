@@ -31,9 +31,10 @@ type CommandRunner func(ctx context.Context, name string, args ...string) ([]byt
 
 // Module implements core.Module for Arch Linux / CachyOS Pacman and AUR package caches.
 type Module struct {
-	cacheDir      string
-	aurDirs       []string
-	commandRunner CommandRunner
+	cacheDir          string
+	aurDirs           []string
+	commandRunner     CommandRunner
+	availableOverride *bool
 }
 
 // New creates and returns a new Pacman module initialized with default system paths.
@@ -79,7 +80,15 @@ func (m *Module) Description() string {
 	return ModuleDesc
 }
 
+// SetAvailable overrides IsAvailable for testing purposes.
+func (m *Module) SetAvailable(available bool) {
+	m.availableOverride = &available
+}
+
 func (m *Module) IsAvailable() bool {
+	if m.availableOverride != nil {
+		return *m.availableOverride
+	}
 	return distro.HasPacman() || distro.Current().Family == distro.FamilyArch
 }
 
