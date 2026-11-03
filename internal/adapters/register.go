@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"github.com/efzynx/sweep/internal/adapters/apt"
+	"github.com/efzynx/sweep/internal/adapters/custom"
 	"github.com/efzynx/sweep/internal/adapters/dnf"
 	"github.com/efzynx/sweep/internal/adapters/docker"
 	"github.com/efzynx/sweep/internal/adapters/flatpak"
@@ -24,6 +25,7 @@ func RegisterDefaultAdapters(r *core.Registry) {
 		snapper.New(),
 		apt.New(),
 		dnf.New(),
+		custom.New(),
 	}
 
 	for _, m := range modules {

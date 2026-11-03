@@ -61,6 +61,12 @@ func main() {
 		cfg = core.DefaultConfig()
 	}
 
+	if customMod, ok := core.DefaultRegistry.Get("custom"); ok {
+		if cm, ok := customMod.(interface{ SetConfig(*core.Config) }); ok {
+			cm.SetConfig(cfg)
+		}
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -77,7 +83,7 @@ func main() {
 }
 
 func runCLI(ctx context.Context, cfg *core.Config, dryRun bool) {
-	available := core.DefaultRegistry.AvailableModules()
+	available := core.DefaultRegistry.EnabledModules(cfg)
 	if len(available) == 0 {
 		fmt.Println("No active modules detected on this system.")
 		return
@@ -86,7 +92,7 @@ func runCLI(ctx context.Context, cfg *core.Config, dryRun bool) {
 	fmt.Printf("Scanning %d available modules...\n\n", len(available))
 	start := time.Now()
 
-	results, err := core.DefaultRegistry.ScanAll(ctx)
+	results, err := core.DefaultRegistry.ScanModules(ctx, available)
 	if err != nil && ctx.Err() != nil {
 		fmt.Fprintf(os.Stderr, "Scan cancelled: %v\n", err)
 		os.Exit(1)

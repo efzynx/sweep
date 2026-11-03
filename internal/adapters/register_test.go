@@ -11,7 +11,7 @@ func TestRegisterDefaultAdapters(t *testing.T) {
 
 	RegisterDefaultAdapters(reg)
 
-	expectedIDs := []string{"pacman", "docker", "flatpak", "snapper", "apt", "dnf"}
+	expectedIDs := []string{"pacman", "docker", "flatpak", "snapper", "apt", "dnf", "custom"}
 	for _, id := range expectedIDs {
 		if _, ok := reg.Get(id); !ok {
 			t.Errorf("expected module %s to be registered", id)

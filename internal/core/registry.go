@@ -104,6 +104,37 @@ func (r *Registry) AvailableModules() []Module {
 	return available
 }
 
+// EnabledModules returns all registered modules where IsAvailable() is true AND
+// cfg.IsModuleEnabled(module.ID()) is true. If cfg is nil, all available modules are returned.
+func (r *Registry) EnabledModules(cfg *Config) []Module {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var enabled []Module
+	for _, m := range r.modules {
+		if m.IsAvailable() {
+			if cfg == nil || cfg.IsModuleEnabled(m.ID()) {
+				enabled = append(enabled, m)
+			}
+		}
+	}
+	return enabled
+}
+
+// FilterEnabled filters a slice of modules according to cfg.IsModuleEnabled().
+func FilterEnabled(modules []Module, cfg *Config) []Module {
+	if cfg == nil {
+		return modules
+	}
+	var filtered []Module
+	for _, m := range modules {
+		if cfg.IsModuleEnabled(m.ID()) {
+			filtered = append(filtered, m)
+		}
+	}
+	return filtered
+}
+
 // ScanAll executes Scan concurrently across all available modules.
 func (r *Registry) ScanAll(ctx context.Context) (map[string]ScanResult, error) {
 	return r.ScanModules(ctx, r.AvailableModules())
@@ -201,7 +232,17 @@ func AvailableModules() []Module {
 	return DefaultRegistry.AvailableModules()
 }
 
+// EnabledModules returns all available and enabled modules in the default registry.
+func EnabledModules(cfg *Config) []Module {
+	return DefaultRegistry.EnabledModules(cfg)
+}
+
 // ScanAll scans all available modules in the default registry.
 func ScanAll(ctx context.Context) (map[string]ScanResult, error) {
 	return DefaultRegistry.ScanAll(ctx)
+}
+
+// ScanEnabled scans all available and enabled modules in the default registry according to cfg.
+func ScanEnabled(ctx context.Context, cfg *Config) (map[string]ScanResult, error) {
+	return DefaultRegistry.ScanModules(ctx, DefaultRegistry.EnabledModules(cfg))
 }

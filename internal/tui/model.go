@@ -188,7 +188,13 @@ func NewModel(ctx context.Context, reg *core.Registry, cfg *core.Config) Model {
 	hasSnapper := distro.HasSnapper()
 	dStats, _ := GetRootDiskStats()
 
-	availMods := reg.AvailableModules()
+	if customMod, ok := reg.Get("custom"); ok {
+		if cm, ok := customMod.(interface{ SetConfig(*core.Config) }); ok {
+			cm.SetConfig(cfg)
+		}
+	}
+
+	availMods := reg.EnabledModules(cfg)
 	items := make([]*ModuleItem, 0, len(availMods))
 	for _, mod := range availMods {
 		items = append(items, &ModuleItem{
@@ -213,7 +219,7 @@ func NewModel(ctx context.Context, reg *core.Registry, cfg *core.Config) Model {
 		scanningAll:              false,
 		modalType:                ModalTypeDryRun,
 		snapperAvailable:         hasSnapper,
-		snapperSafeguardSnapshot: hasSnapper && cfg.SnapshotSafeguard,
+		snapperSafeguardSnapshot: hasSnapper && cfg.General.SnapshotSafeguard,
 		distroInfo:               dInfo,
 		diskStats:                dStats,
 		spinner:                  s,
