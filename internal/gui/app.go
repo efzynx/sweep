@@ -463,6 +463,8 @@ func (a *App) UpdateConfig(cfg core.Config) error {
 
 	a.cfg.General = cfg.General
 	a.cfg.Retention = cfg.Retention
+	a.cfg.DryRunDefault = cfg.General.DryRunDefault
+	a.cfg.SnapshotSafeguard = cfg.General.SnapshotSafeguard
 	if len(cfg.Modules) > 0 {
 		a.cfg.Modules = cfg.Modules
 	}

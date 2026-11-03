@@ -67,6 +67,7 @@ func TestLoadAndSaveConfig(t *testing.T) {
 	// Modify and save
 	cfg.LogLevel = "debug"
 	cfg.PacmanRetention = 2
+	cfg.General.DryRunDefault = false
 	cfg.DryRunDefault = false
 
 	if err := SaveConfig(cfg, configPath); err != nil {
@@ -257,6 +258,53 @@ custom_rules:
 	}
 	if rule.EffectiveSafety() != SafetySafe {
 		t.Errorf("expected SafetySafe, got %v", rule.EffectiveSafety())
+	}
+}
+
+func TestConfig_ToggleSafeguardAndDryRunReactivation(t *testing.T) {
+	cfg := DefaultConfig()
+	// Simulate previously saved config where both were disabled
+	cfg.General.DryRunDefault = false
+	cfg.General.SnapshotSafeguard = false
+	cfg.syncFields()
+
+	if cfg.General.DryRunDefault != false || cfg.General.SnapshotSafeguard != false {
+		t.Fatal("expected both to be false initially")
+	}
+
+	// User reactivates safeguard and dry-run
+	cfg.General.DryRunDefault = true
+	cfg.General.SnapshotSafeguard = true
+	cfg.syncFields()
+
+	if !cfg.General.DryRunDefault {
+		t.Error("expected General.DryRunDefault to be preserved as true after syncFields")
+	}
+	if !cfg.General.SnapshotSafeguard {
+		t.Error("expected General.SnapshotSafeguard to be preserved as true after syncFields")
+	}
+	if !cfg.DryRunDefault {
+		t.Error("expected deprecated DryRunDefault to mirror true")
+	}
+	if !cfg.SnapshotSafeguard {
+		t.Error("expected deprecated SnapshotSafeguard to mirror true")
+	}
+
+	// Save and reload test
+	tempPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := cfg.Save(tempPath); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := LoadConfig(tempPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if !loaded.General.SnapshotSafeguard {
+		t.Error("expected loaded SnapshotSafeguard to be true")
+	}
+	if !loaded.General.DryRunDefault {
+		t.Error("expected loaded DryRunDefault to be true")
 	}
 }
 
