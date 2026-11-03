@@ -24,6 +24,15 @@ type GUIModuleSummary struct {
 	Enabled           bool   `json:"enabled"`
 }
 
+// GUICleanResult encapsulates execution results with stringified errors for reliable JSON serialization over Wails.
+type GUICleanResult struct {
+	CleanedItems []core.CleanableItem `json:"cleaned_items"`
+	FreedBytes   int64                `json:"freed_bytes"`
+	Errors       []string             `json:"errors"`
+	DurationMs   int64                `json:"duration_ms"`
+	Success      bool                 `json:"success"`
+}
+
 // App is the Go desktop application bridge connecting the Sweep Core Engine
 // to the Wails presentation layer.
 type App struct {
@@ -232,14 +241,14 @@ func (a *App) ScanModule(id string) (core.ScanResult, error) {
 }
 
 // CleanItems executes cleanup for the provided items, dispatching them to their respective modules.
-func (a *App) CleanItems(items []core.CleanableItem, dryRun bool, snapshotSafeguard bool) (core.CleanResult, error) {
+func (a *App) CleanItems(items []core.CleanableItem, dryRun bool, snapshotSafeguard bool) (GUICleanResult, error) {
 	a.mu.RLock()
 	reg := a.reg
 	ctx := a.ctx
 	a.mu.RUnlock()
 
 	if reg == nil {
-		return core.CleanResult{}, errors.New("module registry not initialized")
+		return GUICleanResult{}, errors.New("module registry not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -252,8 +261,12 @@ func (a *App) CleanItems(items []core.CleanableItem, dryRun bool, snapshotSafegu
 	}
 
 	if len(items) == 0 {
-		combinedRes.Duration = time.Since(start)
-		return combinedRes, nil
+		return GUICleanResult{
+			CleanedItems: []core.CleanableItem{},
+			Errors:       []string{},
+			DurationMs:   time.Since(start).Milliseconds(),
+			Success:      true,
+		}, nil
 	}
 
 	// 1. Snapper safeguard snapshot if requested and not in dry-run mode
@@ -309,8 +322,19 @@ func (a *App) CleanItems(items []core.CleanableItem, dryRun bool, snapshotSafegu
 		select {
 		case <-ctx.Done():
 			combinedRes.Errors = append(combinedRes.Errors, ctx.Err())
-			combinedRes.Duration = time.Since(start)
-			return combinedRes, ctx.Err()
+			errStrs := make([]string, 0, len(combinedRes.Errors))
+			for _, e := range combinedRes.Errors {
+				if e != nil {
+					errStrs = append(errStrs, e.Error())
+				}
+			}
+			return GUICleanResult{
+				CleanedItems: combinedRes.CleanedItems,
+				FreedBytes:   combinedRes.FreedBytes,
+				Errors:       errStrs,
+				DurationMs:   time.Since(start).Milliseconds(),
+				Success:      false,
+			}, ctx.Err()
 		default:
 		}
 
@@ -343,8 +367,20 @@ func (a *App) CleanItems(items []core.CleanableItem, dryRun bool, snapshotSafegu
 		}
 	}
 
-	combinedRes.Duration = time.Since(start)
-	return combinedRes, nil
+	errStrs := make([]string, 0, len(combinedRes.Errors))
+	for _, e := range combinedRes.Errors {
+		if e != nil {
+			errStrs = append(errStrs, e.Error())
+		}
+	}
+
+	return GUICleanResult{
+		CleanedItems: combinedRes.CleanedItems,
+		FreedBytes:   combinedRes.FreedBytes,
+		Errors:       errStrs,
+		DurationMs:   time.Since(start).Milliseconds(),
+		Success:      len(errStrs) == 0,
+	}, nil
 }
 
 // AddCustomRule validates and adds a custom scan rule to configuration and persists it.
@@ -412,4 +448,34 @@ func (a *App) GetConfig() (*core.Config, error) {
 		return nil, errors.New("configuration not loaded")
 	}
 	return a.cfg, nil
+}
+
+// UpdateConfig updates general and retention configuration options and persists to disk.
+func (a *App) UpdateConfig(cfg core.Config) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.cfg == nil {
+		a.cfg = core.DefaultConfig()
+	}
+
+	a.cfg.General = cfg.General
+	a.cfg.Retention = cfg.Retention
+	if len(cfg.Modules) > 0 {
+		a.cfg.Modules = cfg.Modules
+	}
+
+	if err := a.cfg.Save(""); err != nil {
+		return fmt.Errorf("failed to save configuration: %w", err)
+	}
+
+	if a.reg != nil {
+		for _, mod := range a.reg.Modules() {
+			if cm, ok := mod.(interface{ SetConfig(*core.Config) }); ok {
+				cm.SetConfig(a.cfg)
+			}
+		}
+	}
+
+	return nil
 }

@@ -27,12 +27,28 @@
     'Custom Rules',
   ];
 
-  // Group modules by category
+  // Group modules by category, filtering modules by active partition
   const groupedModules = $derived.by(() => {
     const groups: { name: string; items: ModuleSummary[] }[] = [];
     const map = new Map<string, ModuleSummary[]>();
 
     for (const m of modules) {
+      // If filtering by root or home, only show modules that have items on that partition
+      if (storageFilter !== 'all') {
+        const res = scanResults[m.id];
+        const hasMatchingItems = res?.items?.some((it) => {
+          const target = (it.metadata?.storage_target || it.metadata?.storage || '').toLowerCase();
+          if (storageFilter === 'root') return target === 'root' || !target;
+          if (storageFilter === 'home') return target === 'home';
+          return true;
+        });
+
+        // Hide modules that have no items on this storage partition (except custom module so user can add rules)
+        if (!hasMatchingItems && m.id !== 'custom') {
+          continue;
+        }
+      }
+
       const cat = m.category || 'Containers & System';
       if (!map.has(cat)) {
         map.set(cat, []);

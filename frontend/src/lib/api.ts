@@ -5,6 +5,7 @@ import type {
   ScanResult,
   CleanResult,
   CleanableItem,
+  AppConfig,
 } from './types';
 
 // Detect whether running in Wails desktop runtime
@@ -269,8 +270,35 @@ export const api = {
       cleaned_items: items,
       freed_bytes: freed,
       errors: [],
-      duration: 842000000, // 842ms in nanoseconds
+      duration_ms: 120,
+      success: true,
     });
+  },
+
+  async getConfig(): Promise<AppConfig> {
+    if (isWailsRuntime()) {
+      return (window as any).go.gui.App.GetConfig();
+    }
+    return Promise.resolve({
+      general: {
+        dry_run_default: false,
+        snapshot_safeguard: true,
+        log_level: 'info',
+      },
+      retention: {
+        snapper_min_age_days: 7,
+        pacman_keep_versions: 2,
+        journal_vacuum_days: 7,
+        dev_cache_idle_days: 30,
+      },
+    });
+  },
+
+  async updateConfig(cfg: AppConfig): Promise<void> {
+    if (isWailsRuntime()) {
+      return (window as any).go.gui.App.UpdateConfig(cfg);
+    }
+    return Promise.resolve();
   },
 
   async addCustomRule(

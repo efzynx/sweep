@@ -55,7 +55,10 @@ func New() *Module {
 		cacheDir: defaultPacmanCacheDir,
 		aurDirs:  aurDirs,
 		commandRunner: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, name, args...).Output()
+			if core.IsPrivileged() {
+				return exec.CommandContext(ctx, name, args...).Output()
+			}
+			return core.RunElevated(ctx, name, args...)
 		},
 	}
 }
@@ -411,13 +414,13 @@ func (m *Module) Clean(ctx context.Context, items []core.CleanableItem, opts cor
 
 		switch {
 		case strings.HasPrefix(item.ID, "pacman-cache:"), strings.HasPrefix(item.ID, "pacman-broken:"):
-			if err := os.Remove(item.Path); err != nil && !os.IsNotExist(err) {
+			paths := []string{item.Path}
+			if sigFile := item.Metadata["sig_file"]; sigFile != "" {
+				paths = append(paths, filepath.Join(m.cacheDir, sigFile))
+			}
+			if err := core.RemoveElevated(ctx, paths...); err != nil {
 				cleanRes.Errors = append(cleanRes.Errors, fmt.Errorf("failed to remove %s: %w", item.Path, err))
 			} else {
-				// Also remove signature file if present
-				if sigFile := item.Metadata["sig_file"]; sigFile != "" {
-					_ = os.Remove(filepath.Join(m.cacheDir, sigFile))
-				}
 				cleanRes.CleanedItems = append(cleanRes.CleanedItems, item)
 				cleanRes.FreedBytes += item.Size
 			}

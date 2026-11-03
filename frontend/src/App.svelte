@@ -19,6 +19,8 @@
   import BottomBar from './lib/components/BottomBar.svelte';
   import CustomPathModal from './lib/components/CustomPathModal.svelte';
   import CleanModal from './lib/components/CleanModal.svelte';
+  import SettingsModal from './lib/components/SettingsModal.svelte';
+  import type { AppConfig } from './lib/types';
 
   // App State
   let storage = $state<SystemStorageInfo | null>(null);
@@ -30,9 +32,11 @@
   let searchQuery = $state<string>('');
   let scanning = $state<boolean>(false);
   let safeguardActive = $state<boolean>(true);
+  let appConfig = $state<AppConfig | null>(null);
 
   // Modals state
   let isCustomModalOpen = $state<boolean>(false);
+  let isSettingsModalOpen = $state<boolean>(false);
   let isCleanModalOpen = $state<boolean>(false);
   let cleanModalDryRun = $state<boolean>(false);
   let cleanModalStatus = $state<'RUNNING' | 'COMPLETED' | 'FAILED'>('RUNNING');
@@ -98,23 +102,25 @@
   async function loadData() {
     scanning = true;
     try {
-      const [storageData, distroData, modulesData] = await Promise.all([
+      const [storageData, distroData, modulesData, configData] = await Promise.all([
         api.getStorageInfo(),
         api.getDistroInfo(),
         api.getModules(),
+        api.getConfig(),
       ]);
 
       storage = storageData;
       distro = distroData;
       modules = modulesData;
+      appConfig = configData;
 
       if (!activeModuleId && modulesData.length > 0) {
         activeModuleId = modulesData[0].id;
       }
 
-      // Snapper safeguard active if snapper module is available
+      // Snapper safeguard active if snapper module is available and enabled in config
       const snapperMod = modulesData.find((m) => m.id === 'snapper');
-      safeguardActive = !!snapperMod?.available;
+      safeguardActive = !!snapperMod?.available && (configData.general?.snapshot_safeguard ?? true);
 
       // Scan all modules
       const scanMap = await api.scanAll();
@@ -134,6 +140,43 @@
     } finally {
       scanning = false;
     }
+  }
+
+  // Auto-switch active module when storageFilter changes so it doesn't get stuck on a hidden module
+  $effect(() => {
+    if (storageFilter !== 'all' && activeModuleId !== 'custom') {
+      const currentRes = scanResults[activeModuleId];
+      const hasCurrent = currentRes?.items?.some((it) => {
+        const target = (it.metadata?.storage_target || it.metadata?.storage || '').toLowerCase();
+        if (storageFilter === 'root') return target === 'root' || !target;
+        if (storageFilter === 'home') return target === 'home';
+        return true;
+      });
+
+      if (!hasCurrent) {
+        for (const m of modules) {
+          const res = scanResults[m.id];
+          const has = res?.items?.some((it) => {
+            const target = (it.metadata?.storage_target || it.metadata?.storage || '').toLowerCase();
+            if (storageFilter === 'root') return target === 'root' || !target;
+            if (storageFilter === 'home') return target === 'home';
+            return true;
+          });
+          if (has) {
+            activeModuleId = m.id;
+            break;
+          }
+        }
+      }
+    }
+  });
+
+  // Save settings handler
+  async function handleSaveSettings(cfg: AppConfig) {
+    await api.updateConfig(cfg);
+    appConfig = cfg;
+    safeguardActive = cfg.general.snapshot_safeguard;
+    await loadData();
   }
 
   onMount(() => {
@@ -261,46 +304,63 @@
 
     addLog(
       'INIT',
-      `Starting ${dryRun ? 'Dry-Run Simulation' : 'Cleanup Operation'} across ${distinctModules.size} modules`
+      `Starting ${dryRun ? 'Dry-Run Simulation' : 'Cleanup Operation'} across ${distinctModules.size} modules (${itemsToClean.length} items queued)...`
     );
 
     if (safeguardActive && !dryRun) {
-      addLog('SNAP', 'Creating Snapper pre-clean safeguard snapshot... [OK]');
+      addLog('SNAP', 'Requesting Snapper pre-clean safeguard snapshot...');
     }
 
     try {
-      // Simulate real-time progress increments for visual feedback
-      const step = Math.max(1, Math.floor(itemsToClean.length / 5));
-      for (let i = 0; i < itemsToClean.length; i++) {
-        const it = itemsToClean[i];
-        if (i % step === 0 || i === itemsToClean.length - 1) {
-          cleanModalProcessed = i + 1;
-          cleanModalFreed += it.size || 0;
+      // Call Go bridge with privilege elevation support
+      const result = await api.cleanItems(itemsToClean, dryRun, safeguardActive);
+
+      // Report any errors returned from engine
+      if (result.errors && result.errors.length > 0) {
+        for (const errText of result.errors) {
+          addLog('ERROR', errText);
+        }
+      }
+
+      // Report items that were successfully cleaned
+      if (result.cleaned_items && result.cleaned_items.length > 0) {
+        for (const it of result.cleaned_items) {
           addLog(
             'CLEAN',
-            `${dryRun ? '[DRY-RUN] Would remove' : 'Unlinking'} ${it.path || it.name} (${formatBytes(it.size)})... [OK]`
+            `${dryRun ? '[DRY-RUN] Verified' : 'Cleaned'} ${it.path || it.name} (${formatBytes(it.size || 0)})`
           );
         }
       }
 
-      // Call Go bridge
-      const result = await api.cleanItems(itemsToClean, dryRun, safeguardActive);
+      cleanModalProcessed = result.cleaned_items?.length || 0;
+      cleanModalFreed = result.freed_bytes || 0;
 
-      cleanModalProcessed = itemsToClean.length;
-      cleanModalFreed = result.freed_bytes || selectedStats.totalBytes;
-      cleanModalStatus = 'COMPLETED';
+      const durationMs = result.duration_ms ?? 0;
 
-      const durationStr = formatDurationMs(result.duration || 842000000);
-      addLog(
-        'DONE',
-        `${dryRun ? 'Simulation' : 'Cleanup'} finished successfully in ${durationStr} (${formatBytes(cleanModalFreed)} reclaimed)`
-      );
+      if (!result.success || (result.errors && result.errors.length > 0 && cleanModalProcessed === 0)) {
+        cleanModalStatus = 'FAILED';
+        addLog(
+          'ERROR',
+          `Operation failed: items could not be removed. Check system permissions / root authorization.`
+        );
+      } else if (result.errors && result.errors.length > 0) {
+        cleanModalStatus = 'COMPLETED'; // partial completion
+        addLog(
+          'WARN',
+          `Finished with warnings: ${cleanModalProcessed}/${itemsToClean.length} items cleaned in ${durationMs}ms (${formatBytes(cleanModalFreed)} reclaimed)`
+        );
+      } else {
+        cleanModalStatus = 'COMPLETED';
+        addLog(
+          'DONE',
+          `${dryRun ? 'Simulation' : 'Cleanup'} finished successfully in ${durationMs}ms (${formatBytes(cleanModalFreed)} reclaimed)`
+        );
+      }
 
-      // Refresh storage metrics after real clean
-      if (!dryRun) {
+      // Refresh storage metrics and scan results after real clean
+      if (!dryRun && result.cleaned_items && result.cleaned_items.length > 0) {
         api.getStorageInfo().then((s) => (storage = s));
-        // Remove cleaned items from scanResults
-        const cleanedIds = new Set(result.cleaned_items?.map((it) => it.id) || itemsToClean.map((it) => it.id));
+        const cleanedIds = new Set(result.cleaned_items.map((it) => it.id));
         const nextResults: Record<string, ScanResult> = {};
         for (const [mid, res] of Object.entries(scanResults)) {
           const remaining = res.items.filter((it) => !cleanedIds.has(it.id));
@@ -314,7 +374,7 @@
       }
     } catch (err: any) {
       cleanModalStatus = 'FAILED';
-      addLog('ERROR', `Cleanup failed: ${err?.message || String(err)}`);
+      addLog('ERROR', `Execution aborted: ${err?.message || String(err)}`);
     }
   }
 </script>
@@ -326,6 +386,7 @@
     {safeguardActive}
     {scanning}
     onRefresh={loadData}
+    onOpenSettings={() => (isSettingsModalOpen = true)}
   />
 
   <!-- Storage Telemetry Banner -->
@@ -375,6 +436,14 @@
     isOpen={isCustomModalOpen}
     onClose={() => (isCustomModalOpen = false)}
     onSave={handleSaveCustomRule}
+  />
+
+  <!-- In-App Settings & Retention Modal -->
+  <SettingsModal
+    isOpen={isSettingsModalOpen}
+    config={appConfig}
+    onClose={() => (isSettingsModalOpen = false)}
+    onSave={handleSaveSettings}
   />
 
   <!-- Live Clean & Simulation Execution Modal -->
