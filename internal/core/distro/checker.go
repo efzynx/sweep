@@ -114,3 +114,10 @@ func HasSnapper() bool {
 	_, ok := LookPath("snapper")
 	return ok
 }
+
+// HasSnap reports whether the Snap sandboxed application CLI is installed on PATH.
+func HasSnap() bool {
+	_, ok := LookPath("snap")
+	return ok
+}
+

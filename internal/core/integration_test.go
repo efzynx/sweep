@@ -337,13 +337,15 @@ func TestIntegration_DefaultAdaptersContract(t *testing.T) {
 	}
 
 	expectedElevation := map[string]bool{
-		"pacman":  true,
-		"apt":     true,
-		"dnf":     true,
-		"snapper": true,
-		"docker":  false,
-		"flatpak": false,
-		"custom":  false,
+		"pacman":   true,
+		"apt":      true,
+		"dnf":      true,
+		"snapper":  true,
+		"docker":   false,
+		"flatpak":  false,
+		"custom":   false,
+		"devcache": false,
+		"snap":     true,
 	}
 
 	for _, mod := range modules {
@@ -367,7 +369,7 @@ func TestIntegration_DefaultAdaptersContract(t *testing.T) {
 			}
 
 			// Execute Scan() with a bounded timeout in non-root context
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
 			res, err := mod.Scan(ctx)

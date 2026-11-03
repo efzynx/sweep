@@ -46,7 +46,7 @@ func TestSubsystemAvailabilityRealHost(t *testing.T) {
 		t.Error("expected HasSnapper() to be true on host system")
 	}
 
-	// The host system does NOT have apt, dnf, zypper installed
+	// The host system does NOT have apt, dnf, zypper, snap installed
 	if HasApt() {
 		t.Error("expected HasApt() to be false on CachyOS host")
 	}
@@ -55,6 +55,9 @@ func TestSubsystemAvailabilityRealHost(t *testing.T) {
 	}
 	if HasZypper() {
 		t.Error("expected HasZypper() to be false on CachyOS host")
+	}
+	if HasSnap() {
+		t.Error("expected HasSnap() to be false on CachyOS host")
 	}
 }
 
@@ -65,6 +68,7 @@ func TestSubsystemAvailabilityWithMock(t *testing.T) {
 		"apt-get": "/usr/bin/apt-get",
 		"dnf":     "/usr/bin/dnf",
 		"zypper":  "/usr/bin/zypper",
+		"snap":    "/usr/bin/snap",
 	}
 
 	SetLookPathMock(func(binary string) (string, error) {
@@ -82,6 +86,9 @@ func TestSubsystemAvailabilityWithMock(t *testing.T) {
 	}
 	if !HasZypper() {
 		t.Error("expected HasZypper() to be true with mock")
+	}
+	if !HasSnap() {
+		t.Error("expected HasSnap() to be true with mock")
 	}
 	if HasPacman() {
 		t.Error("expected HasPacman() to be false with mock")
