@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://nfpm.goreleaser.com/schema.json
+name: "sweep-gui"
+arch: "${ARCH}"
+platform: "linux"
+version: "${VERSION}"
+section: "utils"
+priority: "optional"
+maintainer: "Ahmad Fauzan Adiman (Efzyn) <me@efzyn.my.id>"
+description: "Modern Multi-Distro Linux System Cleaner & Maintenance Tool (Desktop GUI & TUI)"
+vendor: "Efzyn"
+homepage: "https://github.com/efzynx/sweep"
+license: "MIT"
+scripts:
+  postinstall: build/package/postinstall.sh
+  postremove: build/package/postremove.sh
+contents:
+  - src: ./staging/sweep-gui
+    dst: /usr/bin/sweep-gui
+    file_info:
+      mode: 0755
+  - src: ./staging/sweep
+    dst: /usr/bin/sweep
+    file_info:
+      mode: 0755
+  - src: build/linux/io.github.efzynx.sweep.desktop
+    dst: /usr/share/applications/io.github.efzynx.sweep.desktop
+    file_info:
+      mode: 0644
+  - src: build/linux/io.github.efzynx.sweep.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/io.github.efzynx.sweep.svg
+  - src: build/linux/io.github.efzynx.sweep-128x128.png
+    dst: /usr/share/icons/hicolor/128x128/apps/io.github.efzynx.sweep.png
+  - src: build/linux/io.github.efzynx.sweep-256x256.png
+    dst: /usr/share/icons/hicolor/256x256/apps/io.github.efzynx.sweep.png
+  - src: build/linux/io.github.efzynx.sweep-512x512.png
+    dst: /usr/share/icons/hicolor/512x512/apps/io.github.efzynx.sweep.png
+  - src: build/linux/io.github.efzynx.sweep.png
+    dst: /usr/share/pixmaps/io.github.efzynx.sweep.png
+  - src: README.md
+    dst: /usr/share/doc/sweep-gui/README.md
+  - src: LICENSE
+    dst: /usr/share/doc/sweep-gui/LICENSE
+overrides:
+  deb:
+    recommends:
+      - libwebkit2gtk-4.1-0
+      - libgtk-3-0
+  rpm:
+    recommends:
+      - webkit2gtk4.1
+      - gtk3
