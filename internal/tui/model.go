@@ -188,8 +188,8 @@ func NewModel(ctx context.Context, reg *core.Registry, cfg *core.Config) Model {
 	hasSnapper := distro.HasSnapper()
 	dStats, _ := GetRootDiskStats()
 
-	if customMod, ok := reg.Get("custom"); ok {
-		if cm, ok := customMod.(interface{ SetConfig(*core.Config) }); ok {
+	for _, mod := range reg.Modules() {
+		if cm, ok := mod.(interface{ SetConfig(*core.Config) }); ok {
 			cm.SetConfig(cfg)
 		}
 	}

@@ -61,8 +61,8 @@ func main() {
 		cfg = core.DefaultConfig()
 	}
 
-	if customMod, ok := core.DefaultRegistry.Get("custom"); ok {
-		if cm, ok := customMod.(interface{ SetConfig(*core.Config) }); ok {
+	for _, mod := range core.DefaultRegistry.Modules() {
+		if cm, ok := mod.(interface{ SetConfig(*core.Config) }); ok {
 			cm.SetConfig(cfg)
 		}
 	}

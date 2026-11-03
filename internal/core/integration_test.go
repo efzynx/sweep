@@ -343,9 +343,11 @@ func TestIntegration_DefaultAdaptersContract(t *testing.T) {
 		"snapper":  true,
 		"docker":   false,
 		"flatpak":  false,
-		"custom":   false,
-		"devcache": false,
-		"snap":     true,
+		"custom":    false,
+		"devcache":  false,
+		"snap":      true,
+		"usercache": false,
+		"journal":   true,
 	}
 
 	for _, mod := range modules {
