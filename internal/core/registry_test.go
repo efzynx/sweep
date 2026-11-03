@@ -19,12 +19,12 @@ type mockModule struct {
 	cleanFunc         func(ctx context.Context, items []CleanableItem, opts CleanOptions) (CleanResult, error)
 }
 
-func (m *mockModule) ID() string                { return m.id }
-func (m *mockModule) Name() string              { return m.name }
-func (m *mockModule) Category() string          { return m.category }
-func (m *mockModule) Description() string       { return m.description }
-func (m *mockModule) IsAvailable() bool         { return m.available }
-func (m *mockModule) RequiresElevation() bool   { return m.requiresElevation }
+func (m *mockModule) ID() string              { return m.id }
+func (m *mockModule) Name() string            { return m.name }
+func (m *mockModule) Category() string        { return m.category }
+func (m *mockModule) Description() string     { return m.description }
+func (m *mockModule) IsAvailable() bool       { return m.available }
+func (m *mockModule) RequiresElevation() bool { return m.requiresElevation }
 func (m *mockModule) Scan(ctx context.Context) (ScanResult, error) {
 	if m.scanFunc != nil {
 		return m.scanFunc(ctx)

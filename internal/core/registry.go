@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	ErrNilModule       = errors.New("cannot register nil module")
-	ErrModuleExists    = errors.New("module already registered")
-	ErrModuleNotFound  = errors.New("module not found")
+	ErrNilModule      = errors.New("cannot register nil module")
+	ErrModuleExists   = errors.New("module already registered")
+	ErrModuleNotFound = errors.New("module not found")
 )
 
 // Registry manages the lifecycle, discovery, and execution of sweep modules.
