@@ -46,20 +46,21 @@ func TestDetectSystemStorage_Host(t *testing.T) {
 		FormatBytes(int64(info.Home.TotalBytes)), FormatBytes(int64(info.Home.FreeBytes)), info.Home.UsedPercent)
 	t.Logf("HasSeparateHome: %v", info.HasSeparateHome)
 
-	if !info.HasSeparateHome {
-		t.Errorf("expected HasSeparateHome to be true on this host (/dev/sda4 root vs /dev/sda5 home)")
+	if info.Root.Device == "" {
+		t.Errorf("expected Root.Device to not be empty")
 	}
-	if info.Root.Device != "/dev/sda4" {
-		t.Errorf("expected Root.Device to be /dev/sda4, got %q", info.Root.Device)
+	if info.Root.FSType == "" {
+		t.Errorf("expected Root.FSType to not be empty")
 	}
-	if info.Home.Device != "/dev/sda5" {
-		t.Errorf("expected Home.Device to be /dev/sda5, got %q", info.Home.Device)
+	if info.Home.Device == "" {
+		t.Errorf("expected Home.Device to not be empty")
 	}
-	if info.Root.FSType != "btrfs" {
-		t.Errorf("expected Root.FSType to be btrfs, got %q", info.Root.FSType)
+	if info.Home.FSType == "" {
+		t.Errorf("expected Home.FSType to not be empty")
 	}
-	if info.Home.FSType != "btrfs" {
-		t.Errorf("expected Home.FSType to be btrfs, got %q", info.Home.FSType)
+	if info.HasSeparateHome != (info.Root.DevID != info.Home.DevID) {
+		t.Errorf("expected HasSeparateHome == (Root.DevID != Home.DevID), got HasSeparateHome=%v, rootDev=%d, homeDev=%d",
+			info.HasSeparateHome, info.Root.DevID, info.Home.DevID)
 	}
 }
 

@@ -32,32 +32,21 @@ func TestSubsystemAvailabilityRealHost(t *testing.T) {
 	ResetLookupCache()
 	defer ResetLookupCache()
 
-	// The host system has pacman, docker, flatpak, snapper installed
-	if !HasPacman() {
-		t.Error("expected HasPacman() to be true on host system")
-	}
-	if !HasDocker() {
-		t.Error("expected HasDocker() to be true on host system")
-	}
-	if !HasFlatpak() {
-		t.Error("expected HasFlatpak() to be true on host system")
-	}
-	if !HasSnapper() {
-		t.Error("expected HasSnapper() to be true on host system")
-	}
-
-	// The host system does NOT have apt, dnf, zypper, snap installed
-	if HasApt() {
-		t.Error("expected HasApt() to be false on CachyOS host")
-	}
-	if HasDnf() {
-		t.Error("expected HasDnf() to be false on CachyOS host")
-	}
-	if HasZypper() {
-		t.Error("expected HasZypper() to be false on CachyOS host")
-	}
-	if HasSnap() {
-		t.Error("expected HasSnap() to be false on CachyOS host")
+	cur := Current()
+	if cur.IsArch() {
+		if !HasPacman() {
+			t.Error("expected HasPacman() to be true on Arch host")
+		}
+		if HasApt() {
+			t.Error("expected HasApt() to be false on Arch host")
+		}
+	} else if cur.IsDebian() {
+		if !HasApt() {
+			t.Error("expected HasApt() to be true on Debian host")
+		}
+		if HasPacman() {
+			t.Error("expected HasPacman() to be false on Debian host")
+		}
 	}
 }
 

@@ -28,8 +28,9 @@ type CommandRunner func(ctx context.Context, name string, args ...string) ([]byt
 
 // Module implements core.Module for Snap sandboxed packages.
 type Module struct {
-	snapsDir      string
-	commandRunner CommandRunner
+	snapsDir          string
+	commandRunner     CommandRunner
+	availableOverride *bool
 }
 
 // New creates and returns a new Snap module instance.
@@ -62,7 +63,15 @@ func (m *Module) Description() string {
 	return ModuleDesc
 }
 
+// SetAvailable overrides IsAvailable for testing purposes.
+func (m *Module) SetAvailable(available bool) {
+	m.availableOverride = &available
+}
+
 func (m *Module) IsAvailable() bool {
+	if m.availableOverride != nil {
+		return *m.availableOverride
+	}
 	return distro.HasSnap()
 }
 

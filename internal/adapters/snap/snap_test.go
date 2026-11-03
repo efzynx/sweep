@@ -28,9 +28,15 @@ func TestSnapModuleContract(t *testing.T) {
 		t.Error("expected RequiresElevation() to be true")
 	}
 
-	// On host system (CachyOS), snap is not installed
-	if m.IsAvailable() {
-		t.Error("expected IsAvailable() to be false on CachyOS host")
+	// Check IsAvailable matches host runtime
+	if distro.HasSnap() {
+		if !m.IsAvailable() {
+			t.Error("expected IsAvailable() to be true when snap is installed")
+		}
+	} else {
+		if m.IsAvailable() {
+			t.Error("expected IsAvailable() to be false when snap is not installed")
+		}
 	}
 }
 

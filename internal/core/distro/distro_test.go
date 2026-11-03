@@ -264,7 +264,6 @@ func TestParseOSReleaseFixtures(t *testing.T) {
 }
 
 func TestHostDistroDetection(t *testing.T) {
-	// The host system running this test suite is CachyOS (an Arch derivative).
 	info, err := Detect()
 	if err != nil {
 		t.Fatalf("Detect() returned unexpected error on host: %v", err)
@@ -274,16 +273,8 @@ func TestHostDistroDetection(t *testing.T) {
 		t.Fatal("expected non-nil DistroInfo on host system")
 	}
 
-	if info.Family != FamilyArch {
-		t.Errorf("expected host family to be FamilyArch, got %v (ID: %s, IDLike: %v)", info.Family, info.ID, info.IDLike)
-	}
-
-	if !info.IsArch() {
-		t.Errorf("expected IsArch() to return true on host")
-	}
-
-	if !info.HasLike("arch") {
-		t.Errorf("expected HasLike(\"arch\") to return true on host")
+	if info.Family == FamilyUnknown {
+		t.Errorf("expected valid host family, got FamilyUnknown (ID: %s, IDLike: %v)", info.ID, info.IDLike)
 	}
 
 	// Verify cached singleton

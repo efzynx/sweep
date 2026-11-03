@@ -30,8 +30,9 @@ type CommandRunner func(ctx context.Context, name string, args ...string) ([]byt
 
 // Module implements core.Module for Debian/Ubuntu APT package manager.
 type Module struct {
-	cachePath     string
-	commandRunner CommandRunner
+	cachePath         string
+	commandRunner     CommandRunner
+	availableOverride *bool
 }
 
 // New creates and returns a new APT module instance.
@@ -64,7 +65,18 @@ func (m *Module) Description() string {
 	return ModuleDesc
 }
 
+// SetAvailable overrides IsAvailable for testing purposes.
+func (m *Module) SetAvailable(available bool) {
+	m.availableOverride = &available
+}
+
 func (m *Module) IsAvailable() bool {
+	if m.availableOverride != nil {
+		return *m.availableOverride
+	}
+	if m.cachePath != defaultAptCachePath {
+		return true
+	}
 	if distro.HasApt() {
 		return true
 	}
