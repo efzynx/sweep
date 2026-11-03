@@ -3,7 +3,9 @@ package core
 import (
 	"context"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -67,7 +69,7 @@ func TestLoadAndSaveConfig(t *testing.T) {
 	cfg.PacmanRetention = 2
 	cfg.DryRunDefault = false
 
-	if err := SaveConfig(configPath, cfg); err != nil {
+	if err := SaveConfig(cfg, configPath); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 
@@ -429,4 +431,247 @@ func stringContains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestGetUserHomeDir_StandardUser(t *testing.T) {
+	origGetuid := getuid
+	defer func() { getuid = origGetuid }()
+
+	// Simulate standard non-root user (uid 1000)
+	getuid = func() int { return 1000 }
+	t.Setenv("SUDO_USER", "ignored_for_nonroot")
+
+	home, err := GetUserHomeDir()
+	if err != nil {
+		t.Fatalf("GetUserHomeDir error: %v", err)
+	}
+
+	expected, _ := os.UserHomeDir()
+	if home != expected {
+		t.Errorf("expected %q, got %q", expected, home)
+	}
+}
+
+func TestGetUserHomeDir_SudoUserSimulation(t *testing.T) {
+	origGetuid := getuid
+	origLookup := lookupUser
+	defer func() {
+		getuid = origGetuid
+		lookupUser = origLookup
+	}()
+
+	// 1. Simulate root with SUDO_USER resolved via lookup
+	getuid = func() int { return 0 }
+	t.Setenv("SUDO_USER", "alice")
+
+	lookupUser = func(username string) (*user.User, error) {
+		if username == "alice" {
+			return &user.User{
+				Username: "alice",
+				HomeDir:  "/home/alice",
+			}, nil
+		}
+		return nil, user.UnknownUserError(username)
+	}
+
+	home, err := GetUserHomeDir()
+	if err != nil {
+		t.Fatalf("GetUserHomeDir failed: %v", err)
+	}
+	if home != "/home/alice" {
+		t.Errorf("expected /home/alice, got %q", home)
+	}
+
+	// Verify ExpandPath and DefaultConfigPath resolve correctly under SUDO_USER
+	expanded := ExpandPath("~/projects")
+	if expanded != "/home/alice/projects" {
+		t.Errorf("expected ExpandPath to use /home/alice, got %q", expanded)
+	}
+
+	cfgPath, err := DefaultConfigPath()
+	if err != nil {
+		t.Fatalf("DefaultConfigPath failed: %v", err)
+	}
+	expectedCfg := "/home/alice/.config/sweep/config.yaml"
+	if cfgPath != expectedCfg {
+		t.Errorf("expected DefaultConfigPath %q, got %q", expectedCfg, cfgPath)
+	}
+
+	// 2. Simulate root with SUDO_USER fallback when user lookup fails
+	lookupUser = func(username string) (*user.User, error) {
+		return nil, user.UnknownUserError(username)
+	}
+	t.Setenv("SUDO_USER", "bob")
+	homeBob, err := GetUserHomeDir()
+	if err != nil {
+		t.Fatalf("GetUserHomeDir with fallback failed: %v", err)
+	}
+	if homeBob != "/home/bob" {
+		t.Errorf("expected fallback /home/bob, got %q", homeBob)
+	}
+
+	// 3. Simulate root with SUDO_USER=root (ignored, should fallback to standard home)
+	t.Setenv("SUDO_USER", "root")
+	stdHome, _ := os.UserHomeDir()
+	homeRoot, err := GetUserHomeDir()
+	if err != nil {
+		t.Fatalf("GetUserHomeDir failed: %v", err)
+	}
+	if homeRoot != stdHome {
+		t.Errorf("expected standard home %q when SUDO_USER=root, got %q", stdHome, homeRoot)
+	}
+
+	// 4. Simulate root with empty SUDO_USER (standard home)
+	t.Setenv("SUDO_USER", "")
+	homeEmpty, err := GetUserHomeDir()
+	if err != nil {
+		t.Fatalf("GetUserHomeDir failed: %v", err)
+	}
+	if homeEmpty != stdHome {
+		t.Errorf("expected standard home %q when SUDO_USER empty, got %q", stdHome, homeEmpty)
+	}
+}
+
+func TestAddAndRemoveCustomRule(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	configPath := filepath.Join(tempDir, "sweep", "config.yaml")
+
+	cfg := DefaultConfig()
+	if err := SaveConfig(cfg, configPath); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	// 1. Validation: empty path should fail
+	err := cfg.AddCustomRule(CustomScanRule{
+		Name: "Empty Path Rule",
+		Path: "   ",
+	})
+	if err == nil {
+		t.Fatal("expected error when adding rule with empty path, got nil")
+	}
+
+	// 2. Validation: invalid glob pattern should fail
+	err = cfg.AddCustomRule(CustomScanRule{
+		Name:    "Invalid Pattern Rule",
+		Path:    "/tmp/test",
+		Pattern: "[a-",
+	})
+	if err == nil {
+		t.Fatal("expected error when adding rule with invalid pattern, got nil")
+	}
+
+	// 3. Add valid rule
+	rule1 := CustomScanRule{
+		ID:        "rule_downloads",
+		Name:      "Old Downloads",
+		Path:      "~/Downloads/old",
+		Pattern:   "*.iso",
+		Recursive: true,
+		Safety:    SafetyCaution,
+	}
+
+	if err := cfg.AddCustomRule(rule1); err != nil {
+		t.Fatalf("AddCustomRule failed: %v", err)
+	}
+
+	// Verify in-memory
+	if len(cfg.CustomRules) != 1 {
+		t.Fatalf("expected 1 custom rule, got %d", len(cfg.CustomRules))
+	}
+	if cfg.CustomRules[0].ID != "rule_downloads" {
+		t.Errorf("expected rule ID rule_downloads, got %s", cfg.CustomRules[0].ID)
+	}
+
+	// Verify persisted on disk
+	reloaded, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if len(reloaded.CustomRules) != 1 {
+		t.Fatalf("expected 1 persisted custom rule, got %d", len(reloaded.CustomRules))
+	}
+	if reloaded.CustomRules[0].Name != "Old Downloads" {
+		t.Errorf("expected Old Downloads, got %s", reloaded.CustomRules[0].Name)
+	}
+
+	// 4. Update existing rule (same ID replaces)
+	rule1Updated := rule1
+	rule1Updated.Pattern = "*.img"
+	if err := cfg.AddCustomRule(rule1Updated); err != nil {
+		t.Fatalf("AddCustomRule update failed: %v", err)
+	}
+	if len(cfg.CustomRules) != 1 {
+		t.Errorf("expected rule count to stay 1 after updating same ID, got %d", len(cfg.CustomRules))
+	}
+
+	// 5. Add second rule with auto-generated ID & name defaults
+	rule2 := CustomScanRule{
+		Path: "/var/tmp/builds",
+	}
+	if err := cfg.AddCustomRule(rule2); err != nil {
+		t.Fatalf("AddCustomRule with auto-ID failed: %v", err)
+	}
+	if len(cfg.CustomRules) != 2 {
+		t.Fatalf("expected 2 rules, got %d", len(cfg.CustomRules))
+	}
+	autoID := cfg.CustomRules[1].ID
+	if autoID == "" {
+		t.Errorf("expected generated ID for rule2, got empty")
+	}
+
+	// 6. Remove non-existent rule should fail
+	if err := cfg.RemoveCustomRule("non_existent_id"); err == nil {
+		t.Fatal("expected error removing non-existent rule, got nil")
+	}
+
+	// 7. Remove empty ID should fail
+	if err := cfg.RemoveCustomRule(""); err == nil {
+		t.Fatal("expected error removing empty rule id, got nil")
+	}
+
+	// 8. Remove rule1
+	if err := cfg.RemoveCustomRule("rule_downloads"); err != nil {
+		t.Fatalf("RemoveCustomRule failed: %v", err)
+	}
+	if len(cfg.CustomRules) != 1 {
+		t.Fatalf("expected 1 rule remaining, got %d", len(cfg.CustomRules))
+	}
+	if cfg.CustomRules[0].ID != autoID {
+		t.Errorf("expected remaining rule ID %s, got %s", autoID, cfg.CustomRules[0].ID)
+	}
+
+	// Verify persistence after removal
+	reloaded2, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if len(reloaded2.CustomRules) != 1 || reloaded2.CustomRules[0].ID != autoID {
+		t.Errorf("persistence mismatch after removal")
+	}
+}
+
+func TestSaveConfig_AtomicAndNil(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "sweep", "config.yaml")
+
+	// Nil config returns error
+	if err := SaveConfig(nil, configPath); err == nil {
+		t.Fatal("expected error saving nil config, got nil")
+	}
+
+	cfg := DefaultConfig()
+	cfg.General.LogLevel = "debug"
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read written config: %v", err)
+	}
+	if !strings.Contains(string(data), "debug") {
+		t.Errorf("expected written file to contain 'debug'")
+	}
 }

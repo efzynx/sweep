@@ -461,10 +461,19 @@ func (c *Config) UnmarshalYAMLData(data []byte) error {
 
 // DefaultConfigPath returns the canonical path to the config file:
 // $XDG_CONFIG_HOME/sweep/config.yaml or ~/.config/sweep/config.yaml.
+// When running as root under sudo, it resolves the original user's config directory.
 func DefaultConfigPath() (string, error) {
+	if getuid() == 0 && os.Getenv("SUDO_USER") != "" && os.Getenv("SUDO_USER") != "root" {
+		home, err := GetUserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("could not determine user home directory: %w", err)
+		}
+		return filepath.Join(home, ".config", DefaultConfigDir, DefaultConfigFile), nil
+	}
+
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
-		home, err := os.UserHomeDir()
+		home, err := GetUserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("could not determine user home directory: %w", err)
 		}
@@ -481,13 +490,14 @@ func SystemConfigPath() string {
 
 // ExpandPath expands leading ~ or ~/ to the current user's home directory
 // and expands any environment variables ($VAR or ${VAR}).
+// Resolves the real interactive user's home directory even when running under sudo.
 func ExpandPath(path string) string {
 	if path == "" {
 		return ""
 	}
 
 	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
-		home, err := os.UserHomeDir()
+		home, err := GetUserHomeDir()
 		if err == nil {
 			if path == "~" {
 				path = home
@@ -632,9 +642,98 @@ func LoadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// SaveConfig marshals the configuration into YAML and writes it to path.
+// AddCustomRule appends or updates a custom scan rule in the configuration,
+// validates its target path, and atomically persists the updated configuration to DefaultConfigPath().
+func (c *Config) AddCustomRule(rule CustomScanRule) error {
+	if c == nil {
+		return errors.New("cannot add custom rule to nil config")
+	}
+
+	trimmedPath := strings.TrimSpace(rule.Path)
+	if trimmedPath == "" {
+		return errors.New("custom rule path cannot be empty")
+	}
+
+	// Validate path pattern syntax if glob wildcards are present
+	if strings.ContainsAny(trimmedPath, "*?[]") {
+		if _, err := filepath.Match(filepath.Base(trimmedPath), ""); err != nil {
+			return fmt.Errorf("invalid custom rule path pattern %q: %w", trimmedPath, err)
+		}
+	}
+
+	// Validate pattern syntax if specified
+	if rule.Pattern != "" {
+		if _, err := filepath.Match(rule.Pattern, ""); err != nil {
+			return fmt.Errorf("invalid custom rule filter pattern %q: %w", rule.Pattern, err)
+		}
+	}
+
+	if rule.ID == "" {
+		if rule.Name != "" {
+			rule.ID = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(rule.Name), " ", "_"))
+		} else {
+			rule.ID = fmt.Sprintf("custom_%d", time.Now().UnixNano())
+		}
+	}
+	if rule.Name == "" {
+		rule.Name = rule.ID
+	}
+	if rule.Safety == "" {
+		rule.Safety = SafetySafe
+	}
+
+	// Check if a rule with this ID already exists, and replace it; otherwise append
+	replaced := false
+	for i, existing := range c.CustomRules {
+		if existing.ID == rule.ID {
+			c.CustomRules[i] = rule
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		c.CustomRules = append(c.CustomRules, rule)
+	}
+
+	return SaveConfig(c, "")
+}
+
+// RemoveCustomRule removes the custom scan rule matching the given ID
+// and atomically persists the updated configuration to DefaultConfigPath().
+func (c *Config) RemoveCustomRule(id string) error {
+	if c == nil {
+		return errors.New("cannot remove rule from nil config")
+	}
+	if strings.TrimSpace(id) == "" {
+		return errors.New("custom rule id cannot be empty")
+	}
+
+	found := false
+	filtered := make([]CustomScanRule, 0, len(c.CustomRules))
+	for _, rule := range c.CustomRules {
+		if rule.ID == id {
+			found = true
+			continue
+		}
+		filtered = append(filtered, rule)
+	}
+
+	if !found {
+		return fmt.Errorf("custom rule with id %q not found", id)
+	}
+
+	c.CustomRules = filtered
+	return SaveConfig(c, "")
+}
+
+// Save marshals and writes the configuration to disk. If path is empty, DefaultConfigPath() is used.
+func (c *Config) Save(path string) error {
+	return SaveConfig(c, path)
+}
+
+// SaveConfig marshals the configuration into YAML and atomically writes it to path.
 // If path is empty, DefaultConfigPath() is used.
-func SaveConfig(path string, cfg *Config) error {
+func SaveConfig(cfg *Config, path string) error {
 	if cfg == nil {
 		return errors.New("cannot save nil config")
 	}
@@ -659,8 +758,30 @@ func SaveConfig(path string, cfg *Config) error {
 		return fmt.Errorf("failed to marshal config to yaml: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file %q: %w", path, err)
+	// Write atomically using a temporary file in the destination directory
+	tmpFile, err := os.CreateTemp(dir, ".sweep_config_*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp config file in %q: %w", dir, err)
+	}
+	tmpName := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(tmpName)
+	}()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("failed to write config to temp file %q: %w", tmpName, err)
+	}
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("failed to sync temp file %q: %w", tmpName, err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file %q: %w", tmpName, err)
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("failed to atomically replace config file %q: %w", path, err)
 	}
 
 	return nil

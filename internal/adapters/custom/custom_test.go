@@ -218,3 +218,41 @@ func TestCustomModule_ContextCancellation(t *testing.T) {
 		t.Error("expected error due to cancelled context")
 	}
 }
+
+func TestCustomModule_AddAndRemoveRule(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	cfg := core.DefaultConfig()
+	m := NewWithConfig(cfg)
+
+	rule := core.CustomScanRule{
+		ID:        "test-rule-1",
+		Name:      "Test Rule 1",
+		Path:      filepath.Join(tempDir, "scratch"),
+		Pattern:   "*.tmp",
+		Recursive: true,
+		Safety:    core.SafetySafe,
+	}
+
+	if err := m.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+
+	rules := m.Rules()
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule in module, got %d", len(rules))
+	}
+	if rules[0].ID != "test-rule-1" {
+		t.Errorf("expected test-rule-1, got %s", rules[0].ID)
+	}
+
+	if err := m.RemoveRule("test-rule-1"); err != nil {
+		t.Fatalf("RemoveRule failed: %v", err)
+	}
+
+	rules = m.Rules()
+	if len(rules) != 0 {
+		t.Fatalf("expected 0 rules in module after remove, got %d", len(rules))
+	}
+}

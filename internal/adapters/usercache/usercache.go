@@ -41,7 +41,7 @@ type Module struct {
 
 // New creates and returns a new User & Desktop Cache module initialized with current user paths.
 func New() *Module {
-	home, err := os.UserHomeDir()
+	home, err := core.GetUserHomeDir()
 	if err != nil || home == "" {
 		home = os.Getenv("HOME")
 	}

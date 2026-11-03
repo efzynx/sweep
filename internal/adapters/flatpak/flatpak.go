@@ -33,7 +33,10 @@ type Module struct {
 
 // New creates and returns a new Flatpak module instance.
 func New() *Module {
-	home := os.Getenv("HOME")
+	home, _ := core.GetUserHomeDir()
+	if home == "" {
+		home = os.Getenv("HOME")
+	}
 	varAppDir := ""
 	if home != "" {
 		varAppDir = filepath.Join(home, ".var", "app")

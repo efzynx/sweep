@@ -38,7 +38,10 @@ type Module struct {
 
 // New creates and returns a new Pacman module initialized with default system paths.
 func New() *Module {
-	home := os.Getenv("HOME")
+	home, _ := core.GetUserHomeDir()
+	if home == "" {
+		home = os.Getenv("HOME")
+	}
 	var aurDirs []string
 	if home != "" {
 		aurDirs = []string{

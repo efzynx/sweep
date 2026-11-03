@@ -43,11 +43,9 @@ type Module struct {
 
 // New creates and returns a new Developer Build Caches module with default system targets.
 func New() *Module {
-	home := os.Getenv("HOME")
-	if home == "" {
-		if uHome, err := os.UserHomeDir(); err == nil {
-			home = uHome
-		}
+	home, err := core.GetUserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
 	}
 
 	m := &Module{

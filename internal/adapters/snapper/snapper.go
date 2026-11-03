@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,6 +22,13 @@ const (
 	ModuleDesc     = "Manage and clean Snapper Btrfs filesystem snapshots with safeguard snapshot protection"
 
 	defaultMountsPath = "/proc/mounts"
+
+	SnapperPermissionDeniedMessage = "Snapper requires root privileges or ALLOW_USERS in /etc/snapper/configs/root. Run with sudo to manage snapshots."
+)
+
+var (
+	// ErrPermissionDenied is returned when Snapper cannot access snapshots due to missing privileges.
+	ErrPermissionDenied = errors.New(SnapperPermissionDeniedMessage)
 )
 
 // CommandRunner defines the signature for executing external commands.
@@ -106,6 +114,7 @@ func (m *Module) CreateSafeguardSnapshot(desc string) error {
 func (m *Module) Scan(ctx context.Context) (core.ScanResult, error) {
 	result := core.ScanResult{
 		Items:     make([]core.CleanableItem, 0),
+		Metadata:  make(map[string]string),
 		ScannedAt: time.Now(),
 	}
 
@@ -124,7 +133,11 @@ func (m *Module) Scan(ctx context.Context) (core.ScanResult, error) {
 		}
 
 		snapItems, err := m.scanConfigSnapshots(ctx, cfg)
-		if err == nil {
+		if err != nil {
+			if errors.Is(err, ErrPermissionDenied) || isSnapperPermissionDenied(err) {
+				result.Metadata["permission_denied"] = SnapperPermissionDeniedMessage
+			}
+		} else {
 			result.Items = append(result.Items, snapItems...)
 		}
 	}
@@ -147,7 +160,7 @@ func (m *Module) discoverConfigs(ctx context.Context) []string {
 			continue
 		}
 		// Clean quotes or commas
-		line = strings.Trim(line, "\", \t")
+		line = strings.Trim(line, "\", 	")
 		if line != "" {
 			found = append(found, line)
 		}
@@ -165,16 +178,65 @@ func (m *Module) scanConfigSnapshots(ctx context.Context, config string) ([]core
 	// Run with --csvout to obtain structured machine-readable fields
 	out, err := m.commandRunner(ctx, "snapper", "--csvout", "-c", config, "list", "--columns", "number,default,active,date,type,description,used-space")
 	if err != nil {
-		// If CSV fails or permission denied, try standard output or exit gracefully
-		out, err = m.commandRunner(ctx, "snapper", "-c", config, "list")
-		if err != nil {
-			// Non-root permission denied or config not found
-			return items, nil
+		// If CSV fails or permission denied, try standard output or exit with diagnostic error
+		outTable, errTable := m.commandRunner(ctx, "snapper", "-c", config, "list")
+		if errTable != nil {
+			if isSnapperPermissionDenied(errTable) || isSnapperPermissionDenied(err) || isSnapperPermissionOutput(outTable) || isSnapperPermissionOutput(out) {
+				return items, ErrPermissionDenied
+			}
+			return items, fmt.Errorf("snapper list failed for config %q: %w", config, errTable)
 		}
-		return parseSnapperTableOutput(out, config), nil
+		if isSnapperPermissionOutput(outTable) {
+			return items, ErrPermissionDenied
+		}
+		return parseSnapperTableOutput(outTable, config), nil
+	}
+
+	if isSnapperPermissionOutput(out) {
+		return items, ErrPermissionDenied
 	}
 
 	return parseSnapperCSVOutput(out, config), nil
+}
+
+func isSnapperPermissionOutput(out []byte) bool {
+	if len(out) == 0 {
+		return false
+	}
+	s := strings.ToLower(string(out))
+	return strings.Contains(s, "no permission") ||
+		strings.Contains(s, "permission denied") ||
+		strings.Contains(s, "allow_users") ||
+		strings.Contains(s, "root privileges")
+}
+
+func isSnapperPermissionDenied(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrPermissionDenied) {
+		return true
+	}
+	errStr := strings.ToLower(err.Error())
+	if strings.Contains(errStr, "permission") ||
+		strings.Contains(errStr, "denied") ||
+		strings.Contains(errStr, "root privileges") {
+		return true
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		stderrStr := strings.ToLower(string(exitErr.Stderr))
+		if strings.Contains(stderrStr, "permission") ||
+			strings.Contains(stderrStr, "denied") ||
+			strings.Contains(stderrStr, "root privileges") {
+			return true
+		}
+	}
+	// Snapper requires root privileges by default on Linux
+	if os.Geteuid() != 0 {
+		return true
+	}
+	return false
 }
 
 // Clean deletes the designated snapshot IDs from Snapper.

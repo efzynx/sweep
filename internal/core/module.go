@@ -37,10 +37,11 @@ type CleanableItem struct {
 
 // ScanResult aggregates all items and statistics found during a module scan.
 type ScanResult struct {
-	Items     []CleanableItem `json:"items"`
-	TotalSize int64           `json:"total_size"`
-	ScannedAt time.Time       `json:"scanned_at"`
-	Error     error           `json:"error,omitempty"`
+	Items     []CleanableItem   `json:"items"`
+	TotalSize int64             `json:"total_size"`
+	ScannedAt time.Time         `json:"scanned_at"`
+	Error     error             `json:"error,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 // RecalculateTotal updates and returns the TotalSize based on all Items in the ScanResult.

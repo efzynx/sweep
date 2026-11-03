@@ -322,3 +322,71 @@ func TestSnapperModule_CleanAndSafeguard(t *testing.T) {
 		t.Errorf("expected home snapshots delete command, not found")
 	}
 }
+
+func TestSnapperModule_PermissionDiagnostics(t *testing.T) {
+	m := New()
+	m.SetConfigs([]string{"root"})
+
+	// Simulate unprivileged execution where snapper returns "No permissions."
+	m.SetCommandRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		cmdStr := strings.Join(args, " ")
+		if strings.Contains(cmdStr, "list-configs") {
+			return []byte("root\n"), nil
+		}
+		return []byte("No permissions.\n"), fmt.Errorf("exit status 1")
+	})
+
+	ctx := context.Background()
+	res, err := m.Scan(ctx)
+	if err != nil {
+		t.Fatalf("Scan should complete gracefully without fatal error, got: %v", err)
+	}
+
+	if len(res.Items) != 0 {
+		t.Errorf("expected 0 items on permission denied, got %d", len(res.Items))
+	}
+
+	permMsg, ok := res.Metadata["permission_denied"]
+	if !ok {
+		t.Fatalf("expected permission_denied metadata key to be set")
+	}
+	if !strings.Contains(permMsg, "root privileges") || !strings.Contains(permMsg, "sudo") {
+		t.Errorf("unexpected permission_denied message: %q", permMsg)
+	}
+}
+
+func TestSnapperModule_PrivilegedRootScanSucceeds(t *testing.T) {
+	m := New()
+	m.SetConfigs([]string{"root"})
+
+	now := time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02 15:04:05")
+	csvOutput := fmt.Sprintf(`"number","default","active","date","type","description","used-space"
+"0","yes","yes","","single","current subvolume","0 B"
+"10","no","no","%s","single","root snapshot","500 MiB"
+`, now)
+
+	m.SetCommandRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		cmdStr := strings.Join(args, " ")
+		if strings.Contains(cmdStr, "list-configs") {
+			return []byte("root\n"), nil
+		}
+		if strings.Contains(cmdStr, "list") {
+			return []byte(csvOutput), nil
+		}
+		return nil, fmt.Errorf("unknown command: %v", args)
+	})
+
+	ctx := context.Background()
+	res, err := m.Scan(ctx)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if _, hasPerm := res.Metadata["permission_denied"]; hasPerm {
+		t.Errorf("expected permission_denied NOT to be set when scan succeeds")
+	}
+
+	if len(res.Items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(res.Items))
+	}
+}

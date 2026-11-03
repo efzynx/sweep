@@ -98,6 +98,53 @@ func (m *Module) Rules() []core.CustomScanRule {
 	return result
 }
 
+// AddRule validates and adds a custom rule to the underlying configuration and syncs in-memory rules.
+func (m *Module) AddRule(rule core.CustomScanRule) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cfg != nil {
+		if err := m.cfg.AddCustomRule(rule); err != nil {
+			return err
+		}
+		m.rules = make([]core.CustomScanRule, len(m.cfg.CustomRules))
+		copy(m.rules, m.cfg.CustomRules)
+		return nil
+	}
+	if rule.Path == "" {
+		return fmt.Errorf("custom rule path cannot be empty")
+	}
+	m.rules = append(m.rules, rule)
+	return nil
+}
+
+// RemoveRule removes a custom rule by ID from the configuration and syncs in-memory rules.
+func (m *Module) RemoveRule(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cfg != nil {
+		if err := m.cfg.RemoveCustomRule(id); err != nil {
+			return err
+		}
+		m.rules = make([]core.CustomScanRule, len(m.cfg.CustomRules))
+		copy(m.rules, m.cfg.CustomRules)
+		return nil
+	}
+	var filtered []core.CustomScanRule
+	found := false
+	for _, r := range m.rules {
+		if r.ID == id {
+			found = true
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	if !found {
+		return fmt.Errorf("custom rule with id %q not found", id)
+	}
+	m.rules = filtered
+	return nil
+}
+
 // Scan iterates over all configured CustomScanRules and finds cleanable items.
 func (m *Module) Scan(ctx context.Context) (core.ScanResult, error) {
 	start := time.Now()
@@ -152,7 +199,7 @@ func (m *Module) Clean(ctx context.Context, items []core.CleanableItem, opts cor
 		return cleanRes, nil
 	}
 
-	home, _ := os.UserHomeDir()
+	home, _ := core.GetUserHomeDir()
 	cleanHome := ""
 	if home != "" {
 		cleanHome = filepath.Clean(home)
