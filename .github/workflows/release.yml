@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag name (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
 
 permissions:
   contents: write
@@ -55,11 +61,11 @@ jobs:
       - name: Build Release Binaries & Packages
         run: |
           mkdir -p release
-          TAG_NAME=${GITHUB_REF#refs/tags/}
+          TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          echo "Building CLI binaries..."
+          echo "Building CLI binaries for tag ${TAG_NAME}..."
           for ARCH in amd64 arm64; do
             echo "Building CLI for linux/${ARCH}..."
             CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build \
@@ -94,6 +100,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Sweep ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             release/*.tar.gz
             release/sweep-linux-*
