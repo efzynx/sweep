@@ -59,14 +59,16 @@ var (
 			Foreground(ColorPrimary).
 			Bold(true)
 
-	// Pane Borders & Containers
+	// Pane Borders & Containers (Nordic Minimalist #263449)
+	ColorNordicBorder = lipgloss.Color("#263449") // Subtle Dark Slate Border
+
 	ActivePaneBorder = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(ColorPrimary)
 
 	InactivePaneBorder = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(ColorSubtle)
+				BorderForeground(ColorNordicBorder)
 
 	PaneTitleActive = lipgloss.NewStyle().
 			Bold(true).
@@ -95,7 +97,18 @@ var (
 				Bold(true).
 				Foreground(ColorPrimary).
 				Border(lipgloss.NormalBorder(), false, false, true, false).
-				BorderForeground(ColorSubtle)
+				BorderForeground(ColorNordicBorder)
+
+	// Safeguard Badges (Nordic Statusline)
+	SafeguardActiveBadge = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorSuccess).
+				Render("[BTRFS SAFEGUARD: ACTIVE]")
+
+	SafeguardInactiveBadge = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorMuted).
+				Render("[BTRFS SAFEGUARD: INACTIVE]")
 
 	// Badges - STRICT: Zero Emojis
 	BadgeSafe = lipgloss.NewStyle().
@@ -144,7 +157,7 @@ var (
 	// Footer & Keybinding Legend
 	FooterContainer = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), true, false, false, false).
-			BorderForeground(ColorSubtle).
+			BorderForeground(ColorNordicBorder).
 			Padding(0, 1)
 
 	KeyBadge = lipgloss.NewStyle().

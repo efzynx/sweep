@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/efzynx/sweep/internal/core"
+	"github.com/efzynx/sweep/internal/core/distro"
 )
 
 // mockTestModule implements core.Module for unit testing TUI state transitions.
@@ -376,7 +377,7 @@ func TestTUI_WindowResizeAndCompact(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "SWEEP") || !strings.Contains(view, "Modules") {
+	if !strings.Contains(view, "SWEEP") || !strings.Contains(view, "SUBSYSTEMS") {
 		t.Errorf("expected desktop split view, got:\n%s", view)
 	}
 
@@ -433,8 +434,30 @@ func TestTUI_ZeroEmojisValidation(t *testing.T) {
 	m.viewMode = ViewModeModal
 	modalRendered := m.View()
 	for _, r := range modalRendered {
-		if (r >= 0x1F300 && r <= 0x1FAFF) || (r >= 0x2600 && r <= 0x27BF) {
+		if (r >= 0x1F300 && r <= 0x1FAFF) || (r >= 0x2600 && r <= 0x27BF) || (r >= 0x1F900 && r <= 0x1F9FF) {
 			t.Fatalf("forbidden emoji rune found in rendered Confirmation modal: %c (U+%X)", r, r)
+		}
+	}
+
+	// Check Executing view
+	m.viewMode = ViewModeExecuting
+	m.logs = []string{"Cleaning dangling containers...", "Done."}
+	execRendered := m.View()
+	for _, r := range execRendered {
+		if (r >= 0x1F300 && r <= 0x1FAFF) || (r >= 0x2600 && r <= 0x27BF) || (r >= 0x1F900 && r <= 0x1F9FF) {
+			t.Fatalf("forbidden emoji rune found in rendered Executing view: %c (U+%X)", r, r)
+		}
+	}
+
+	// Check Done view
+	m.viewMode = ViewModeDone
+	m.cleanedItems = 5
+	m.freedBytes = 1024 * 1024 * 50
+	m.duration = time.Second
+	doneRendered := m.View()
+	for _, r := range doneRendered {
+		if (r >= 0x1F300 && r <= 0x1FAFF) || (r >= 0x2600 && r <= 0x27BF) || (r >= 0x1F900 && r <= 0x1F9FF) {
+			t.Fatalf("forbidden emoji rune found in rendered Done view: %c (U+%X)", r, r)
 		}
 	}
 }
@@ -502,19 +525,25 @@ func TestTUI_HeaderAndModalRootNotices(t *testing.T) {
 		UsedPercent: 50.0,
 	}
 
-	// 1. Verify Header output
+	// 1. Verify Header output (Concept 2 Nordic Minimalist statusline)
 	header := m.renderHeader()
-	if !strings.Contains(header, "Ahmad Fauzan Adiman (Efzyn)") {
-		t.Errorf("expected author in header, got:\n%s", header)
+	if !strings.Contains(header, "SWEEP //") {
+		t.Errorf("expected 'SWEEP //' in header, got:\n%s", header)
 	}
-	if !strings.Contains(header, "[TARGET: ROOT FILESYSTEM (/)]") {
-		t.Errorf("expected target root badge in header, got:\n%s", header)
+	if !strings.Contains(header, "by Efzyn") {
+		t.Errorf("expected 'by Efzyn' in header, got:\n%s", header)
 	}
-	if !strings.Contains(header, "Mode Optimasi & Pemeliharaan Sistem Linux") {
-		t.Errorf("expected mode text in header, got:\n%s", header)
+	if !strings.Contains(header, "Root (/):") {
+		t.Errorf("expected 'Root (/):' in header, got:\n%s", header)
 	}
-	if !strings.Contains(header, "Total:") || !strings.Contains(header, "Tersisa (Free):") || !strings.Contains(header, "Terpakai (Used):") {
-		t.Errorf("expected detailed disk stats in header, got:\n%s", header)
+	if !strings.Contains(header, "50.0% Used") {
+		t.Errorf("expected '50.0%% Used' in header, got:\n%s", header)
+	}
+	if !strings.Contains(header, "Total:") || !strings.Contains(header, "Sisa:") {
+		t.Errorf("expected 'Total:' and 'Sisa:' in header, got:\n%s", header)
+	}
+	if !strings.Contains(header, "[BTRFS SAFEGUARD:") {
+		t.Errorf("expected '[BTRFS SAFEGUARD:' in header, got:\n%s", header)
 	}
 
 	// 2. Verify Confirmation Modal output
@@ -525,10 +554,13 @@ func TestTUI_HeaderAndModalRootNotices(t *testing.T) {
 		t.Errorf("expected target notice in modal, got:\n%s", modal)
 	}
 
-	// 3. Verify Footer contains [?] info
+	// 3. Verify Footer contains ? info and Total Reclaimable:
 	footer := m.renderFooter()
-	if !strings.Contains(footer, "[?]") || !strings.Contains(footer, "info") {
-		t.Errorf("expected '[?]' and 'info' in footer, got:\n%s", footer)
+	if !strings.Contains(footer, "?") || !strings.Contains(footer, "info") {
+		t.Errorf("expected '?' and 'info' in footer, got:\n%s", footer)
+	}
+	if !strings.Contains(footer, "Total Reclaimable:") {
+		t.Errorf("expected 'Total Reclaimable:' in footer, got:\n%s", footer)
 	}
 }
 
@@ -891,4 +923,195 @@ func TestTUI_ConcurrentResizeAndRenderRace(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestTUI_Concept2_NordicStatuslineAndTreePane(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+	m.width = 135
+	m.height = 35
+	m.diskStats = DiskStats{
+		TotalBytes:  100 * 1024 * 1024 * 1024,
+		UsedBytes:   69 * 1024 * 1024 * 1024,
+		FreeBytes:   31 * 1024 * 1024 * 1024,
+		UsedPercent: 69.0,
+	}
+
+	// 1. Test Statusline components & 2-row invariant on wide screens
+	header := m.renderHeader()
+	headerLines := strings.Split(header, "\n")
+	if len(headerLines) != 2 {
+		t.Fatalf("expected header on 135 cols to be strictly 2 rows, got %d:\n%s", len(headerLines), header)
+	}
+	if !strings.Contains(headerLines[0], "SWEEP //") {
+		t.Errorf("line 0 missing 'SWEEP //': %q", headerLines[0])
+	}
+	if !strings.Contains(headerLines[0], "by Efzyn") {
+		t.Errorf("line 0 missing 'by Efzyn': %q", headerLines[0])
+	}
+	if !strings.Contains(headerLines[0], "Root (/):") || !strings.Contains(headerLines[0], "69.0% Used") {
+		t.Errorf("line 0 missing 'Root (/): 69.0%% Used': %q", headerLines[0])
+	}
+	if !strings.Contains(headerLines[0], "Total:") || !strings.Contains(headerLines[0], "Sisa:") {
+		t.Errorf("line 0 missing 'Total:' and 'Sisa:': %q", headerLines[0])
+	}
+	if !strings.Contains(headerLines[0], "[BTRFS SAFEGUARD:") {
+		t.Errorf("line 0 missing '[BTRFS SAFEGUARD:': %q", headerLines[0])
+	}
+	if !strings.Contains(headerLines[1], "─") {
+		t.Errorf("line 1 missing divider line '─': %q", headerLines[1])
+	}
+
+	// 2. Test Tree Subsystems Pane
+	leftPane := m.renderLeftPane(40, 20)
+	if !strings.Contains(leftPane, "SUBSYSTEMS [2 DETECTED]") {
+		t.Errorf("left pane missing 'SUBSYSTEMS [2 DETECTED]':\n%s", leftPane)
+	}
+	if !strings.Contains(leftPane, "PACKAGE MANAGERS") {
+		t.Errorf("left pane missing 'PACKAGE MANAGERS':\n%s", leftPane)
+	}
+	if !strings.Contains(leftPane, "CONTAINERS & VIRTUALIZATION") {
+		t.Errorf("left pane missing 'CONTAINERS & VIRTUALIZATION':\n%s", leftPane)
+	}
+	if (!strings.Contains(leftPane, "└─") && !strings.Contains(leftPane, "├─")) || !strings.Contains(leftPane, "Pacman Test") {
+		t.Errorf("left pane missing box-drawing tree glyph for Pacman Test:\n%s", leftPane)
+	}
+	if (!strings.Contains(leftPane, "└─") && !strings.Contains(leftPane, "├─")) || !strings.Contains(leftPane, "Docker Test") {
+		t.Errorf("left pane missing box-drawing tree glyph for Docker Test:\n%s", leftPane)
+	}
+	// Initial focus on left pane: active cursor marker '>'
+	if !strings.Contains(leftPane, "> ") {
+		t.Errorf("left pane missing active cursor '> ':\n%s", leftPane)
+	}
+
+	// 3. Test Right Pane Item Inspector
+	rightPane := m.renderRightPane(80, 20)
+	if !strings.Contains(rightPane, "PACMAN TEST • 3 ITEMS TERDETEKSI") {
+		t.Errorf("right pane missing module title & item count:\n%s", rightPane)
+	}
+	if !strings.Contains(rightPane, "[Tab] switch pane") {
+		t.Errorf("right pane missing '[Tab] switch pane' hint:\n%s", rightPane)
+	}
+	if !strings.Contains(rightPane, "SEL") || !strings.Contains(rightPane, "NAMA ITEM") || !strings.Contains(rightPane, "UKURAN") || !strings.Contains(rightPane, "TINGKAT BAHAYA") {
+		t.Errorf("right pane missing table column headers:\n%s", rightPane)
+	}
+	if !strings.Contains(rightPane, "[SAFE]") || !strings.Contains(rightPane, "[CAUTION]") || !strings.Contains(rightPane, "[HIGH]") {
+		t.Errorf("right pane missing safety badges:\n%s", rightPane)
+	}
+
+	// 4. Test Minimalist Footer
+	footer := m.renderFooter()
+	if !strings.Contains(footer, "j/k navigasi") || !strings.Contains(footer, "Space toggle") || !strings.Contains(footer, "•") {
+		t.Errorf("footer missing compact keybinding hints or bullet separator:\n%s", footer)
+	}
+	if !strings.Contains(footer, "Total Reclaimable:") {
+		t.Errorf("footer missing 'Total Reclaimable:':\n%s", footer)
+	}
+}
+
+func TestTUI_Concept2_NarrowScreenStatusline(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.width = 75
+	m.height = 24
+	m.diskStats = DiskStats{
+		TotalBytes:  100 * 1024 * 1024 * 1024,
+		UsedBytes:   50 * 1024 * 1024 * 1024,
+		FreeBytes:   50 * 1024 * 1024 * 1024,
+		UsedPercent: 50.0,
+	}
+
+	header := m.renderHeader()
+	lines := strings.Split(header, "\n")
+	// On narrow screens (< 90 cols), header vertical height must not exceed 3 rows
+	if len(lines) > 3 {
+		t.Errorf("narrow screen header should be at most 3 rows, got %d:\n%s", len(lines), header)
+	}
+	if !strings.Contains(header, "SWEEP //") {
+		t.Errorf("narrow header missing 'SWEEP //':\n%s", header)
+	}
+	if !strings.Contains(header, "Root (/):") {
+		t.Errorf("narrow header missing 'Root (/):':\n%s", header)
+	}
+}
+
+func TestTUI_Concept2_ComprehensiveQA(t *testing.T) {
+	// 1. Test CategoryPriority sorting
+	p1 := CategoryPriority("pacman")
+	p2 := CategoryPriority("docker")
+	p3 := CategoryPriority("snapper")
+	p4 := CategoryPriority("unknown_subsystem")
+	if !(p1 < p2 && p2 < p3 && p3 < p4) {
+		t.Fatalf("expected CategoryPriority pacman(%d) < docker(%d) < snapper(%d) < other(%d)", p1, p2, p3, p4)
+	}
+
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+
+	// 2. Test Distro fallbacks in Statusline
+	// Case A: nil distroInfo
+	m.distroInfo = nil
+	m.width = 120
+	hA := m.renderHeader()
+	if !strings.Contains(hA, "SWEEP // Linux // by Efzyn") {
+		t.Errorf("expected 'SWEEP // Linux // by Efzyn' for nil distro, got:\n%s", hA)
+	}
+
+	// Case B: family only
+	m.distroInfo = &distro.DistroInfo{Family: distro.FamilyArch}
+	hB := m.renderHeader()
+	if !strings.Contains(hB, "SWEEP // Linux (Arch) // by Efzyn") {
+		t.Errorf("expected 'SWEEP // Linux (Arch) // by Efzyn' for family only, got:\n%s", hB)
+	}
+
+	// Case C: prettyName + family
+	m.distroInfo = &distro.DistroInfo{PrettyName: "CachyOS", Family: distro.FamilyArch}
+	hC := m.renderHeader()
+	if !strings.Contains(hC, "SWEEP // CachyOS (Arch) // by Efzyn") {
+		t.Errorf("expected 'SWEEP // CachyOS (Arch) // by Efzyn', got:\n%s", hC)
+	}
+
+	// 3. Test Safeguard Badge Toggle
+	m.snapperAvailable = true
+	if !strings.Contains(m.renderHeader(), "[BTRFS SAFEGUARD: ACTIVE]") {
+		t.Errorf("expected ACTIVE safeguard badge when snapper is available")
+	}
+	m.snapperAvailable = false
+	if !strings.Contains(m.renderHeader(), "[BTRFS SAFEGUARD: INACTIVE]") {
+		t.Errorf("expected INACTIVE safeguard badge when snapper is unavailable")
+	}
+
+	// 4. Test Footer Responsiveness at 3 width breakpoints
+	// Breakpoint 1: >= 130
+	m.width = 140
+	fWide := m.renderFooter()
+	if !strings.Contains(fWide, "j/k navigasi") || !strings.Contains(fWide, "Space toggle") || !strings.Contains(fWide, "•") {
+		t.Errorf("wide footer missing full keys or bullet: %s", fWide)
+	}
+
+	// Breakpoint 2: 100..129
+	m.width = 110
+	fMed := m.renderFooter()
+	if !strings.Contains(fMed, "j/k nav") || !strings.Contains(fMed, "Space toggle") {
+		t.Errorf("medium footer missing abbreviated keys: %s", fMed)
+	}
+
+	// Breakpoint 3: < 100
+	m.width = 80
+	fCompact := m.renderFooter()
+	if !strings.Contains(fCompact, "Space toggle") || !strings.Contains(fCompact, "d dry") {
+		t.Errorf("compact footer missing core keys: %s", fCompact)
+	}
 }

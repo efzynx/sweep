@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sweep TUI - 3 UI Design Mockups</title>
+<style>
+  :root {
+    --bg-app: #0b0f17;
+    --bg-card: #111827;
+    --bg-card-subtle: #162032;
+    --border-color: #1f293d;
+    --border-focus: #06b6d4;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --text-subtle: #64748b;
+    --cyan: #06b6d4;
+    --cyan-dim: #083344;
+    --purple: #a855f7;
+    --purple-dim: #2e1065;
+    --green: #10b981;
+    --green-dim: #064e3b;
+    --yellow: #f59e0b;
+    --yellow-dim: #451a03;
+    --red: #ef4444;
+    --red-dim: #450a0a;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    font-family: var(--font-sans);
+    padding: 20px;
+    line-height: 1.5;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  header.mockup-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .badge-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+  }
+
+  h1.mockup-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 8px 0 4px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  p.mockup-desc {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  /* Concept Switcher Tabs */
+  .tabs-nav {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .tab-btn:hover {
+    background: var(--bg-card-subtle);
+    color: var(--text-main);
+    border-color: #334155;
+  }
+
+  .tab-btn.active {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
+  }
+
+  .tab-btn .badge-pill {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+
+  .tab-btn.active .badge-pill {
+    background: rgba(6, 182, 212, 0.3);
+    color: #fff;
+  }
+
+  /* Mockup Card Container */
+  .concept-pane {
+    display: none;
+    animation: fadeIn 0.25s ease-in-out;
+  }
+
+  .concept-pane.active {
+    display: block;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .concept-intro {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .concept-intro h3 {
+    font-size: 16px;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+
+  .concept-intro p {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .concept-pros {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .pro-chip {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #1e293b;
+    color: #94a3b8;
+    border: 1px solid #334155;
+  }
+
+  /* Terminal Window Canvas */
+  .terminal-window {
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+
+  .terminal-titlebar {
+    background: #0f172a;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #1e293b;
+    user-select: none;
+  }
+
+  .window-dots {
+    display: flex;
+    gap: 6px;
+    margin-right: 14px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .dot-red { background: #ef4444; }
+  .dot-yellow { background: #f59e0b; }
+  .dot-green { background: #10b981; }
+
+  .window-title {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .terminal-body {
+    padding: 16px;
+    color: #e2e8f0;
+    min-height: 520px;
+  }
+
+  /* Terminal Elements Styling */
+  .t-cyan { color: var(--cyan); }
+  .t-purple { color: var(--purple); }
+  .t-green { color: var(--green); }
+  .t-yellow { color: var(--yellow); }
+  .t-red { color: var(--red); }
+  .t-muted { color: var(--text-muted); }
+  .t-dim { color: var(--text-subtle); }
+  .t-bold { font-weight: 700; }
+
+  .t-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .badge-safe { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+  .badge-caution { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+  .badge-danger { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+  .badge-cyan { background: rgba(6, 182, 212, 0.15); color: #06b6d4; border: 1px solid rgba(6, 182, 212, 0.3); }
+  .badge-purple { background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); }
+
+  /* Concept 1 Layout: 3 Columns Cockpit */
+  .c1-grid {
+    display: grid;
+    grid-template-columns: 240px 240px 1fr;
+    gap: 12px;
+  }
+
+  .box-panel {
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.4);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .box-panel.active-focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 8px rgba(6, 182, 212, 0.2);
+  }
+
+  .panel-header {
+    padding: 6px 10px;
+    border-bottom: 1px solid #1e293b;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .active-focus .panel-header {
+    color: var(--cyan);
+    border-bottom-color: rgba(6, 182, 212, 0.3);
+  }
+
+  .panel-content {
+    padding: 8px;
+    flex: 1;
+  }
+
+  .list-row {
+    padding: 4px 6px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+    cursor: pointer;
+  }
+
+  .list-row:hover { background: rgba(255, 255, 255, 0.04); }
+  .list-row.selected-row { background: #1e293b; color: #fff; }
+  .list-row.active-item { background: rgba(6, 182, 212, 0.15); color: #fff; font-weight: 600; }
+
+  /* Concept 2 Layout: Minimalist Floating Split */
+  .c2-header-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .c2-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 16px;
+  }
+
+  /* Concept 3 Layout: Mission Control / Tabs on Top */
+  .c3-top-banner {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+  }
+
+  .c3-module-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+  }
+
+  .c3-mod-tab {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 8px 12px;
+    min-width: 140px;
+    cursor: pointer;
+  }
+
+  .c3-mod-tab.active {
+    border-color: var(--cyan);
+    background: var(--cyan-dim);
+  }
+
+  /* Table layout for items */
+  .table-view {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+  }
+
+  .table-view th {
+    text-align: left;
+    padding: 5px 8px;
+    color: var(--text-subtle);
+    border-bottom: 1px solid #1e293b;
+    font-weight: 600;
+  }
+
+  .table-view td {
+    padding: 5px 8px;
+    border-bottom: 1px solid rgba(30, 41, 59, 0.4);
+    white-space: nowrap;
+  }
+
+  .table-view tr:hover td {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .table-view tr.cursor-row td {
+    background: #1e293b;
+    color: #fff;
+  }
+
+  .footer-status {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #1e293b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11.5px;
+  }
+
+  .keys-group {
+    display: flex;
+    gap: 8px;
+  }
+
+  .key-pill {
+    color: var(--cyan);
+    font-weight: 700;
+  }
+
+  .selection-summary {
+    background: rgba(6, 182, 212, 0.1);
+    color: var(--cyan);
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header class="mockup-header">
+    <div class="badge-tag">TUI Design Exploration • Sweep v1.0</div>
+    <h1 class="mockup-title">
+      3 Pilihan Konsep Desain TUI untuk Sweep
+    </h1>
+    <p class="mockup-desc">
+      Silakan klik tab di bawah untuk melihat simulasi visual dan layout dari masing-masing konsep antarmuka. Pilih konsep yang paling sesuai dengan preferensi alur kerja Anda.
+    </p>
+  </header>
+
+  <!-- Concept Navigation Tabs -->
+  <div class="tabs-nav">
+    <button class="tab-btn active" onclick="switchConcept('concept1')">
+      <span>Konsep 1: The Modern Cockpit</span>
+      <span class="badge-pill">3 Kolom • Info Lengkap</span>
+    </button>
+    <button class="tab-btn" onclick="switchConcept('concept2')">
+      <span>Konsep 2: Nordic Minimalist</span>
+      <span class="badge-pill">Elegan • Clean Monospace</span>
+    </button>
+    <button class="tab-btn" onclick="switchConcept('concept3')">
+      <span>Konsep 3: Mission Control</span>
+      <span class="badge-pill">Tab Horizontal • Ruang Luas</span>
+    </button>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- CONCEPT 1: THE MODERN COCKPIT (3-COLUMNS) -->
+  <!-- ========================================== -->
+  <div id="concept1" class="concept-pane active">
+    <div class="concept-intro">
+      <div>
+        <h3>Konsep 1: "The Modern Cockpit" (3-Column Telemetry & Split)</h3>
+        <p>Terinspirasi dari layout <em>btop</em> & <em>lazygit</em>. Membagi layar menjadi 3 kolom: Telemetri Root Disk (Kiri), Daftar Modul (Tengah), dan Item Inspector & File Path (Kanan).</p>
+      </div>
+      <div class="concept-pros">
+        <span class="pro-chip">Zero Overlap</span>
+        <span class="pro-chip">Live Disk Metrics</span>
+        <span class="pro-chip">Power User Friendly</span>
+      </div>
+    </div>
+
+    <div class="terminal-window">
+      <div class="terminal-titlebar">
+        <div class="window-dots">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <div class="window-title">sweep — modern linux cleaner (cachyos/arch)</div>
+      </div>
+      <div class="terminal-body">
+        <!-- Top Title Bar -->
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #1e293b; padding-bottom:6px;">
+          <div>
+            <span class="t-badge badge-cyan">SWEEP</span>
+            <span class="t-bold" style="margin-left:6px;">SYSTEM CLEANER</span>
+            <span class="t-dim" style="margin-left:8px;">by Ahmad Fauzan Adiman (Efzyn)</span>
+          </div>
+          <div>
+            <span class="t-dim">[TARGET: ROOT /]</span>
+            <span class="t-badge badge-purple" style="margin-left:6px;">CACHYOS (ARCH)</span>
+          </div>
+        </div>
+
+        <!-- 3 Columns Layout -->
+        <div class="c1-grid">
+          <!-- Col 1: System & Disk Telemetry -->
+          <div class="box-panel">
+            <div class="panel-header">
+              <span>STORAGE TELEMETRY</span>
+              <span class="t-cyan">/ (root)</span>
+            </div>
+            <div class="panel-content">
+              <div style="margin-bottom:10px;">
+                <div style="font-size:11px; color:#94a3b8; margin-bottom:3px;">Root Disk Capacity</div>
+                <div class="t-cyan t-bold" style="font-size:13px;">69.0% Used</div>
+                <div style="color:#06b6d4; font-size:11px; margin-top:2px;">[██████████████░░░░░░]</div>
+              </div>
+
+              <div style="font-size:11px; line-height:1.7; border-top:1px solid #1e293b; padding-top:8px;">
+                <div style="display:flex; justify-content:space-between;"><span class="t-dim">Total:</span> <span>100.0 GB</span></div>
+                <div style="display:flex; justify-content:space-between;"><span class="t-dim">Terpakai:</span> <span class="t-yellow">69.0 GB</span></div>
+                <div style="display:flex; justify-content:space-between;"><span class="t-dim">Tersisa:</span> <span class="t-green t-bold">30.0 GB</span></div>
+              </div>
+
+              <div style="font-size:11px; margin-top:12px; border-top:1px solid #1e293b; padding-top:8px;">
+                <div class="t-dim" style="margin-bottom:4px;">Safeguard Status:</div>
+                <div class="t-green">✓ Btrfs / Snapper Hook Ready</div>
+                <div class="t-dim" style="font-size:10px; margin-top:2px;">Pre-clean auto snapshot active</div>
+              </div>
+
+              <div style="font-size:11px; margin-top:12px; border-top:1px solid #1e293b; padding-top:8px;">
+                <div class="t-dim" style="margin-bottom:4px;">Cleanable Detected:</div>
+                <div class="t-cyan t-bold">11.88 GB</div>
+                <div class="t-dim" style="font-size:10px;">37 potential candidates</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Col 2: Subsystem Modules -->
+          <div class="box-panel active-focus">
+            <div class="panel-header">
+              <span>MODULES [4]</span>
+              <span class="t-cyan">FOCUS [1]</span>
+            </div>
+            <div class="panel-content">
+              <div class="list-row active-item">
+                <div><span>> [ ]</span> <span>Docker</span></div>
+                <span class="t-cyan">412.8 MB</span>
+              </div>
+              <div class="list-row">
+                <div><span>  [x]</span> <span>Pacman/AUR</span></div>
+                <span class="t-green">11.40 GB</span>
+              </div>
+              <div class="list-row">
+                <div><span>  [x]</span> <span>Flatpak</span></div>
+                <span class="t-green">72.6 MB</span>
+              </div>
+              <div class="list-row">
+                <div><span>  [ ]</span> <span>Snapper</span></div>
+                <span class="t-dim">0 B</span>
+              </div>
+              <div style="margin-top:16px; border-top:1px dashed #1e293b; padding-top:8px; font-size:10.5px; color:#64748b;">
+                <div>Phase 2 Modules (Planned):</div>
+                <div style="margin-top:4px;">• System Caches & Trash</div>
+                <div>• Browser Caches</div>
+                <div>• Developer Caches (npm, go)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Col 3: Cleanable Items Inspector -->
+          <div class="box-panel">
+            <div class="panel-header">
+              <span>ITEMS: DOCKER ENGINE [8 items]</span>
+              <span class="t-dim">TAB TO SWITCH</span>
+            </div>
+            <div class="panel-content" style="padding:0;">
+              <table class="table-view">
+                <thead>
+                  <tr>
+                    <th style="width:24px;"></th>
+                    <th>Nama Item / Volume</th>
+                    <th>Ukuran</th>
+                    <th>Safety</th>
+                    <th>Detail Path / Alasan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="cursor-row">
+                    <td>> [ ]</td>
+                    <td class="t-bold">anivora_postgres_data</td>
+                    <td>67.25 MB</td>
+                    <td><span class="t-badge badge-caution">[CAUTION]</span></td>
+                    <td class="t-dim">Dangling volume not connected</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">inventaris_asrama_mysql_data</td>
+                    <td>199.20 MB</td>
+                    <td><span class="t-badge badge-caution">[CAUTION]</span></td>
+                    <td class="t-dim">Dangling volume not connected</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">multica_pgdata</td>
+                    <td>73.30 MB</td>
+                    <td><span class="t-badge badge-caution">[CAUTION]</span></td>
+                    <td class="t-dim">Dangling volume not connected</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">smksuboh_postgres_data</td>
+                    <td>69.42 MB</td>
+                    <td><span class="t-badge badge-caution">[CAUTION]</span></td>
+                    <td class="t-dim">Dangling volume not connected</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">inventaris_asrama_static_volume</td>
+                    <td>3.61 MB</td>
+                    <td><span class="t-badge badge-caution">[CAUTION]</span></td>
+                    <td class="t-dim">Dangling volume not connected</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">portainer_data</td>
+                    <td>34.55 KB</td>
+                    <td><span class="t-badge badge-caution">[CAUTION]</span></td>
+                    <td class="t-dim">Dangling volume not connected</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer-status">
+          <div class="keys-group">
+            <span><span class="key-pill">[Tab]</span> Pane</span>
+            <span><span class="key-pill">[Space]</span> Toggle</span>
+            <span><span class="key-pill">[a]</span> All</span>
+            <span><span class="key-pill">[s]</span> Rescan</span>
+            <span><span class="key-pill">[d]</span> Dry-run</span>
+            <span><span class="key-pill">[Enter]</span> Clean</span>
+            <span><span class="key-pill">[?]</span> Info</span>
+            <span><span class="key-pill">[q]</span> Quit</span>
+          </div>
+          <div class="selection-summary">
+            Selected: 11.47 GB / 11.88 GB (29 items)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- CONCEPT 2: NORDIC MINIMALIST (TELESCOPE)   -->
+  <!-- ========================================== -->
+  <div id="concept2" class="concept-pane">
+    <div class="concept-intro">
+      <div>
+        <h3>Konsep 2: "Nordic Minimalist" (Refined Split & Statusline)</h3>
+        <p>Terinspirasi dari <em>Neovim Telescope</em> dan <em>GitHub CLI (gh)</em>. Sangat bersih, tipografi presisi, border elegan tipis, dan top statusline terpadu yang sangat hemat ruang vertikal.</p>
+      </div>
+      <div class="concept-pros">
+        <span class="pro-chip">Ultralight Vertical Space</span>
+        <span class="pro-chip">Neovim Style</span>
+        <span class="pro-chip">Tree Navigation</span>
+      </div>
+    </div>
+
+    <div class="terminal-window">
+      <div class="terminal-titlebar">
+        <div class="window-dots">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <div class="window-title">sweep — minimal terminal view</div>
+      </div>
+      <div class="terminal-body">
+        <!-- Unified Compact Statusline -->
+        <div class="c2-header-line">
+          <div>
+            <span class="t-cyan t-bold">SWEEP</span>
+            <span class="t-dim">//</span>
+            <span style="font-weight:600;">CachyOS (Arch)</span>
+            <span class="t-dim">//</span>
+            <span class="t-dim">by Efzyn</span>
+          </div>
+          <div>
+            <span class="t-dim">Root (/):</span>
+            <span class="t-bold t-cyan">69.0% Used</span>
+            <span class="t-dim">[Total: 100G • Sisa:</span>
+            <span class="t-green t-bold">30.0G</span>
+            <span class="t-dim">]</span>
+          </div>
+          <div>
+            <span class="t-badge badge-safe">BTRFS SAFEGUARD: ACTIVE</span>
+          </div>
+        </div>
+
+        <!-- 2 Columns Minimal Split -->
+        <div class="c2-grid">
+          <!-- Left: Clean Tree List -->
+          <div class="box-panel" style="background:transparent; border-color:#263449;">
+            <div class="panel-header" style="background:#0e1526; border-color:#263449;">
+              <span>SUBSYSTEMS</span>
+              <span class="t-dim">4 DETECTED</span>
+            </div>
+            <div class="panel-content" style="padding:10px;">
+              <div style="font-size:11px; color:#64748b; margin-bottom:6px;">PACKAGE MANAGERS</div>
+              <div class="list-row" style="padding-left:8px;">
+                <span>├─ [x] Pacman & AUR</span>
+                <span class="t-green">11.40 GB</span>
+              </div>
+              <div class="list-row" style="padding-left:8px;">
+                <span>└─ [x] Flatpak Packages</span>
+                <span class="t-green">72.62 MB</span>
+              </div>
+
+              <div style="font-size:11px; color:#64748b; margin:10px 0 6px;">CONTAINERS & SYSTEM</div>
+              <div class="list-row active-item" style="padding-left:8px;">
+                <span>├─ [ ] Docker Engine</span>
+                <span class="t-cyan">412.82 MB</span>
+              </div>
+              <div class="list-row" style="padding-left:8px;">
+                <span>└─ [ ] Snapper Snapshots</span>
+                <span class="t-dim">0 B</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Sleek Table -->
+          <div class="box-panel" style="background:transparent; border-color:#263449;">
+            <div class="panel-header" style="background:#0e1526; border-color:#263449;">
+              <span>DOCKER ENGINE &bull; 8 ITEMS TERDETEKSI</span>
+              <span class="t-cyan">[Tab] switch pane</span>
+            </div>
+            <div class="panel-content" style="padding:0;">
+              <table class="table-view">
+                <thead>
+                  <tr style="border-bottom-color:#263449;">
+                    <th style="width:24px;"></th>
+                    <th>Nama Item</th>
+                    <th>Ukuran</th>
+                    <th>Tingkat Bahaya</th>
+                    <th>Deskripsi Ringkas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="cursor-row" style="background:rgba(6, 182, 212, 0.1);">
+                    <td class="t-cyan">> [ ]</td>
+                    <td class="t-cyan t-bold">anivora_postgres_data</td>
+                    <td>67.25 MB</td>
+                    <td><span class="t-badge badge-caution">CAUTION</span></td>
+                    <td class="t-dim">Dangling volume</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">inventaris_asrama_mysql_data</td>
+                    <td>199.20 MB</td>
+                    <td><span class="t-badge badge-caution">CAUTION</span></td>
+                    <td class="t-dim">Dangling volume</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">multica_pgdata</td>
+                    <td>73.30 MB</td>
+                    <td><span class="t-badge badge-caution">CAUTION</span></td>
+                    <td class="t-dim">Dangling volume</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">smksuboh_postgres_data</td>
+                    <td>69.42 MB</td>
+                    <td><span class="t-badge badge-caution">CAUTION</span></td>
+                    <td class="t-dim">Dangling volume</td>
+                  </tr>
+                  <tr>
+                    <td>  [ ]</td>
+                    <td class="t-bold">inventaris_asrama_static_volume</td>
+                    <td>3.61 MB</td>
+                    <td><span class="t-badge badge-caution">CAUTION</span></td>
+                    <td class="t-dim">Dangling volume</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Minimal Footer -->
+        <div class="footer-status" style="border-top-color:#263449;">
+          <div class="t-dim">
+            <span class="t-cyan">j/k</span> navigasi &bull; <span class="t-cyan">Space</span> toggle &bull; <span class="t-cyan">a</span> all &bull; <span class="t-cyan">d</span> dry-run &bull; <span class="t-cyan">Enter</span> clean &bull; <span class="t-cyan">?</span> info
+          </div>
+          <div>
+            <span class="t-dim">Total Reclaimable:</span> <span class="t-cyan t-bold">11.47 GB</span> <span class="t-dim">/ 11.88 GB</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- CONCEPT 3: MISSION CONTROL (TOP TABS)      -->
+  <!-- ========================================== -->
+  <div id="concept3" class="concept-pane">
+    <div class="concept-intro">
+      <div>
+        <h3>Konsep 3: "Mission Control" (Top Tabs & Wide Table)</h3>
+        <p>Terinspirasi dari <em>k9s</em> & <em>lazydocker</em>. Modul diletakkan di atas sebagai Tab Bar horizontal sehingga tabel di bawah mendapatkan lebar 100% layar tanpa terpotong!</p>
+      </div>
+      <div class="concept-pros">
+        <span class="pro-chip">Full-Width Path View</span>
+        <span class="pro-chip">Number Key Shortcuts (1-4)</span>
+        <span class="pro-chip">No Horizontal Truncation</span>
+      </div>
+    </div>
+
+    <div class="terminal-window">
+      <div class="terminal-titlebar">
+        <div class="window-dots">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <div class="window-title">sweep — fullwidth mission control</div>
+      </div>
+      <div class="terminal-body">
+        <!-- Top Telemetry Card -->
+        <div class="c3-top-banner">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div>
+              <span class="t-badge badge-cyan">SWEEP</span>
+              <span class="t-bold" style="margin-left:6px;">ROOT OPTIMIZATION CONTROL</span>
+              <span class="t-dim" style="margin-left:8px;">• Author: Ahmad Fauzan Adiman (Efzyn)</span>
+            </div>
+            <div style="font-size:11px;">
+              <span class="t-dim">Host:</span> <span class="t-purple">CachyOS (Arch Linux 7.2.7)</span>
+            </div>
+          </div>
+
+          <!-- Segmented Meter Bar -->
+          <div style="margin-bottom:6px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px;">
+              <span>Root Filesystem (/) Allocation</span>
+              <span><span class="t-yellow t-bold">69.0 GB</span> Terpakai / <span class="t-green t-bold">30.0 GB</span> Bebas (Total: 100.0 GB)</span>
+            </div>
+            <div style="color:#06b6d4; font-size:12px;">[████████████████████████████████████░░░░░░░░░░░░░░░░] 69.0%</div>
+          </div>
+        </div>
+
+        <!-- Horizontal Module Tabs -->
+        <div class="c3-module-tabs">
+          <div class="c3-mod-tab active">
+            <div style="font-size:10px; color:#94a3b8;">[1] DOCKER</div>
+            <div class="t-bold" style="font-size:13px; color:#fff;">412.82 MB</div>
+            <div style="font-size:10px; color:#06b6d4;">8 unused items</div>
+          </div>
+
+          <div class="c3-mod-tab">
+            <div style="font-size:10px; color:#94a3b8;">[2] PACMAN & AUR</div>
+            <div class="t-bold" style="font-size:13px; color:#10b981;">11.40 GB</div>
+            <div style="font-size:10px; color:#10b981;">18 items (selected)</div>
+          </div>
+
+          <div class="c3-mod-tab">
+            <div style="font-size:10px; color:#94a3b8;">[3] FLATPAK</div>
+            <div class="t-bold" style="font-size:13px; color:#10b981;">72.62 MB</div>
+            <div style="font-size:10px; color:#10b981;">11 items (selected)</div>
+          </div>
+
+          <div class="c3-mod-tab">
+            <div style="font-size:10px; color:#94a3b8;">[4] SNAPPER BTRFS</div>
+            <div class="t-bold" style="font-size:13px; color:#64748b;">0 B</div>
+            <div style="font-size:10px; color:#64748b;">0 old snapshots</div>
+          </div>
+        </div>
+
+        <!-- Full-Width Table View -->
+        <div class="box-panel" style="min-height:220px;">
+          <div class="panel-header">
+            <span>ITEM EXPLORER: DOCKER ENGINE</span>
+            <span class="t-cyan">Tekan [1-4] untuk ganti modul &bull; [/] Filter item</span>
+          </div>
+          <div class="panel-content" style="padding:0;">
+            <table class="table-view">
+              <thead>
+                <tr>
+                  <th style="width:28px;">Sel</th>
+                  <th>ID / Nama Item</th>
+                  <th>Ukuran</th>
+                  <th>Safety</th>
+                  <th>Absolute Path / Identifier</th>
+                  <th>Terakhir Dimodifikasi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="cursor-row">
+                  <td class="t-cyan">> [ ]</td>
+                  <td class="t-bold t-cyan">anivora_postgres_data</td>
+                  <td>67.25 MB</td>
+                  <td><span class="t-badge badge-caution">CAUTION</span></td>
+                  <td>/var/lib/docker/volumes/anivora_postgres_data/_data</td>
+                  <td class="t-dim">3 hari lalu</td>
+                </tr>
+                <tr>
+                  <td>  [ ]</td>
+                  <td class="t-bold">inventaris_asrama_mysql_data</td>
+                  <td>199.20 MB</td>
+                  <td><span class="t-badge badge-caution">CAUTION</span></td>
+                  <td>/var/lib/docker/volumes/inventaris_asrama_mysql_data/_data</td>
+                  <td class="t-dim">5 hari lalu</td>
+                </tr>
+                <tr>
+                  <td>  [ ]</td>
+                  <td class="t-bold">multica_pgdata</td>
+                  <td>73.30 MB</td>
+                  <td><span class="t-badge badge-caution">CAUTION</span></td>
+                  <td>/var/lib/docker/volumes/multica_pgdata/_data</td>
+                  <td class="t-dim">1 minggu lalu</td>
+                </tr>
+                <tr>
+                  <td>  [ ]</td>
+                  <td class="t-bold">smksuboh_postgres_data</td>
+                  <td>69.42 MB</td>
+                  <td><span class="t-badge badge-caution">CAUTION</span></td>
+                  <td>/var/lib/docker/volumes/smksuboh_postgres_data/_data</td>
+                  <td class="t-dim">2 minggu lalu</td>
+                </tr>
+                <tr>
+                  <td>  [ ]</td>
+                  <td class="t-bold">inventaris_asrama_static_volume</td>
+                  <td>3.61 MB</td>
+                  <td><span class="t-badge badge-caution">CAUTION</span></td>
+                  <td>/var/lib/docker/volumes/inventaris_asrama_static_volume/_data</td>
+                  <td class="t-dim">1 bulan lalu</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer-status">
+          <div class="keys-group">
+            <span><span class="key-pill">[1-4]</span> Modul</span>
+            <span><span class="key-pill">[j/k]</span> Navigasi</span>
+            <span><span class="key-pill">[Space]</span> Toggle</span>
+            <span><span class="key-pill">[a]</span> All</span>
+            <span><span class="key-pill">[d]</span> Dry-run</span>
+            <span><span class="key-pill">[Enter]</span> Clean</span>
+            <span><span class="key-pill">[?]</span> Info</span>
+          </div>
+          <div class="selection-summary">
+            Selected: 11.47 GB / 11.88 GB
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchConcept(conceptId) {
+    // Update tabs
+    const buttons = document.querySelectorAll('.tab-btn');
+    buttons.forEach((btn, index) => {
+      btn.classList.remove('active');
+    });
+
+    if (conceptId === 'concept1') buttons[0].classList.add('active');
+    if (conceptId === 'concept2') buttons[1].classList.add('active');
+    if (conceptId === 'concept3') buttons[2].classList.add('active');
+
+    // Update panes
+    const panes = document.querySelectorAll('.concept-pane');
+    panes.forEach(pane => pane.classList.remove('active'));
+
+    const activePane = document.getElementById(conceptId);
+    if (activePane) activePane.classList.add('active');
+  }
+
+  // Handle URL param ?concept=concept2 or #concept2
+  const params = new URLSearchParams(window.location.search);
+  const requested = params.get('c') || window.location.hash.replace('#', '');
+  if (requested && ['concept1', 'concept2', 'concept3'].includes(requested)) {
+    switchConcept(requested);
+  }
+</script>
+
+</body>
+</html>

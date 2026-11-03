@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -11,6 +13,20 @@ import (
 	"github.com/efzynx/sweep/internal/core"
 	"github.com/efzynx/sweep/internal/core/distro"
 )
+
+// CategoryPriority returns ordinal sorting rank for subsystem categories.
+func CategoryPriority(cat string) int {
+	switch strings.ToLower(strings.TrimSpace(cat)) {
+	case "package_manager", "sandboxed_apps", "pkg", "pacman", "flatpak", "apt", "dnf":
+		return 1
+	case "containers", "docker", "podman":
+		return 2
+	case "snapshots", "filesystem", "system", "snapper", "btrfs":
+		return 3
+	default:
+		return 4
+	}
+}
 
 // ViewMode represents the currently active full-screen or overlay mode.
 type ViewMode int
@@ -179,6 +195,9 @@ func NewModel(ctx context.Context, reg *core.Registry, cfg *core.Config) Model {
 			Module: mod,
 		})
 	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return CategoryPriority(items[i].Module.Category()) < CategoryPriority(items[j].Module.Category())
+	})
 
 	return Model{
 		ctx:                      subCtx,

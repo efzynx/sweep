@@ -8,134 +8,102 @@ import (
 	"github.com/efzynx/sweep/internal/core"
 )
 
-// renderHeader generates the top application banner, distro badge, and disk meter.
+// formatCategoryTitle formats a subsystem category into a clean Nordic category header.
+func formatCategoryTitle(cat string) string {
+	switch strings.ToLower(strings.TrimSpace(cat)) {
+	case "package_manager", "sandboxed_apps", "pkg", "pacman", "flatpak", "apt", "dnf":
+		return "PACKAGE MANAGERS"
+	case "containers", "docker", "podman":
+		return "CONTAINERS & VIRTUALIZATION"
+	case "snapshots", "filesystem", "system", "snapper", "btrfs":
+		return "FILESYSTEM & SYSTEM"
+	default:
+		c := strings.ReplaceAll(strings.ToUpper(cat), "_", " ")
+		if c == "" {
+			return "OTHER SUBSYSTEMS"
+		}
+		return c
+	}
+}
+
+// renderHeader generates the ultra-compact Nordic Minimalist (Telescope-style) statusline.
+// Maximum vertical height: 2 rows (statusline + divider), or 3 rows on narrow screens (< 90 cols).
 func (m *Model) renderHeader() string {
 	topWidth := m.width
 	if topWidth < 40 {
 		topWidth = 40
 	}
 
-	distroStr := "Unknown Linux"
-	distroShort := "Linux"
+	distroStr := "Linux"
 	if m.distroInfo != nil {
 		if m.distroInfo.PrettyName != "" {
-			distroShort = m.distroInfo.PrettyName
-		}
-		if m.distroInfo.Family != "" && m.distroInfo.Family != "unknown" {
-			distroStr = fmt.Sprintf("%s (%s)", m.distroInfo.PrettyName, strings.ToUpper(string(m.distroInfo.Family)))
-			if distroShort == "Linux" {
-				distroShort = string(m.distroInfo.Family)
-			}
-		} else {
 			distroStr = m.distroInfo.PrettyName
 		}
+		if m.distroInfo.Family != "" && m.distroInfo.Family != "unknown" {
+			famRaw := string(m.distroInfo.Family)
+			famTitle := strings.ToUpper(famRaw[:1]) + strings.ToLower(famRaw[1:])
+			distroStr = fmt.Sprintf("%s (%s)", distroStr, famTitle)
+		}
 	}
 
-	banner := BannerStyle.Render("SWEEP")
-	sub := BannerSubStyle.Render("SYSTEM CLEANER")
+	// Left segment: SWEEP // <Distro> // by Efzyn
+	sweepText := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("SWEEP")
+	slashDim := lipgloss.NewStyle().Foreground(ColorSubtle).Render("//")
+	distroStyled := lipgloss.NewStyle().Bold(true).Foreground(ColorFgWhite).Render(distroStr)
+	authorDim := lipgloss.NewStyle().Foreground(ColorMuted).Render("by Efzyn")
+	leftSegment := fmt.Sprintf("%s %s %s %s %s", sweepText, slashDim, distroStyled, slashDim, authorDim)
 
-	diskBarWidth := 20
-	if topWidth > 95 {
-		diskBarWidth = 28
-	} else if topWidth < 70 {
-		diskBarWidth = 12
-	}
-	visualBar, statsLine := RenderRootDiskStats(m.diskStats, diskBarWidth)
-	diskLabel := DiskInfoStyle.Render("Root (/) Disk Usage: ")
-	diskMeter := DiskMeterStyle.Render(visualBar)
-	diskStatsStyled := lipgloss.NewStyle().Foreground(ColorMuted).Render(statsLine)
+	// Center segment: Root (/): <Pct>% Used [Total: <Total> • Sisa: <Free>]
+	rootLabel := lipgloss.NewStyle().Foreground(ColorMuted).Render("Root (/): ")
+	usedPct := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(fmt.Sprintf("%.1f%% Used", m.diskStats.UsedPercent))
+	totalStr := core.FormatBytes(int64(m.diskStats.TotalBytes))
+	freeStr := core.FormatBytes(int64(m.diskStats.FreeBytes))
+	totalPart := lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf(" [Total: %s • Sisa: ", totalStr))
+	freePart := lipgloss.NewStyle().Bold(true).Foreground(ColorSuccess).Render(freeStr)
+	closeBracket := lipgloss.NewStyle().Foreground(ColorMuted).Render("]")
+	centerSegment := fmt.Sprintf("%s%s%s%s%s", rootLabel, usedPct, totalPart, freePart, closeBracket)
 
-	divider := lipgloss.NewStyle().Foreground(ColorSubtle).Render(strings.Repeat("─", topWidth))
-
-	// Constrained height layout (<= 26 rows): strictly 4 rows
-	if m.height <= 26 {
-		var authorBadge string
-		var distroBadge string
-		if topWidth < 75 {
-			authorBadge = AuthorStyle.Render("By Ahmad Fauzan Adiman (Efzyn)")
-			distroBadge = DistroBadgeStyle.Render(fmt.Sprintf("[%s]", distroShort))
-		} else {
-			authorBadge = AuthorStyle.Render("• By Ahmad Fauzan Adiman (Efzyn)")
-			distroBadge = DistroBadgeStyle.Render(fmt.Sprintf("[Distro: %s]", distroStr))
-		}
-
-		var appTitle string
-		if topWidth >= 105 {
-			appTitle = lipgloss.JoinHorizontal(lipgloss.Center, banner, sub, lipgloss.NewStyle().SetString(" ").String(), authorBadge)
-		} else {
-			appTitle = lipgloss.JoinHorizontal(lipgloss.Center, banner, lipgloss.NewStyle().SetString(" ").String(), authorBadge)
-		}
-
-		gap := topWidth - lipgloss.Width(appTitle) - lipgloss.Width(distroBadge) - 2
-		if gap < 1 {
-			gap = 1
-		}
-		line1 := lipgloss.JoinHorizontal(lipgloss.Center, appTitle, strings.Repeat(" ", gap), distroBadge)
-
-		// Line 2: Target root notice
-		targetBadge := TargetBadgeStyle.Render("[TARGET: ROOT FILESYSTEM (/)]")
-		targetText := " • Mode Optimasi & Pemeliharaan Sistem Linux"
-		if topWidth < 75 {
-			targetText = " • Mode Optimasi Sistem Linux"
-		}
-		targetNotice := TargetTextStyle.Render(targetText)
-		line2 := lipgloss.JoinHorizontal(lipgloss.Center, targetBadge, targetNotice)
-
-		// Line 3: Disk meter + stats in one single row
-		line3 := fmt.Sprintf("%s%s   %s", diskLabel, diskMeter, diskStatsStyled)
-
-		// Line 4: Divider
-		line4 := divider
-
-		return lipgloss.JoinVertical(lipgloss.Left, line1, line2, line3, line4)
-	}
-
-	// Unconstrained height layout (> 26 rows): generous spacing
-	author := AuthorStyle.Render("• By Ahmad Fauzan Adiman (Efzyn)")
-	distroBadge := DistroBadgeStyle.Render(fmt.Sprintf("[Distro: %s]", distroStr))
-
-	var topLine string
-	var authorLine string
-	if topWidth >= 90 {
-		appTitle := lipgloss.JoinHorizontal(lipgloss.Center, banner, sub, lipgloss.NewStyle().SetString(" ").String(), author)
-		gapWidth := topWidth - lipgloss.Width(appTitle) - lipgloss.Width(distroBadge) - 2
-		if gapWidth < 1 {
-			gapWidth = 1
-		}
-		topLine = lipgloss.JoinHorizontal(lipgloss.Center, appTitle, strings.Repeat(" ", gapWidth), distroBadge)
+	// Right segment: [BTRFS SAFEGUARD: ACTIVE] badge (or INACTIVE if Snapper unavailable)
+	var rightBadge string
+	if m.snapperAvailable {
+		rightBadge = SafeguardActiveBadge
 	} else {
-		appTitle := lipgloss.JoinHorizontal(lipgloss.Center, banner, sub)
-		gapWidth := topWidth - lipgloss.Width(appTitle) - lipgloss.Width(distroBadge) - 2
-		if gapWidth < 1 {
-			gapWidth = 1
-		}
-		topLine = lipgloss.JoinHorizontal(lipgloss.Center, appTitle, strings.Repeat(" ", gapWidth), distroBadge)
-		authorLine = AuthorStyle.Render("By Ahmad Fauzan Adiman (Efzyn)")
+		rightBadge = SafeguardInactiveBadge
 	}
 
-	// Target notification line
-	targetBadge := TargetBadgeStyle.Render("[TARGET: ROOT FILESYSTEM (/)]")
-	targetNotice := TargetTextStyle.Render(" • Mode Optimasi & Pemeliharaan Sistem Linux")
-	targetLine := lipgloss.JoinHorizontal(lipgloss.Center, targetBadge, targetNotice)
+	divider := lipgloss.NewStyle().Foreground(ColorNordicBorder).Render(strings.Repeat("─", topWidth))
 
-	var diskSection string
-	if topWidth >= 105 {
-		diskSection = fmt.Sprintf("%s%s   %s", diskLabel, diskMeter, diskStatsStyled)
-	} else {
-		diskSection = fmt.Sprintf("%s%s\n%s", diskLabel, diskMeter, diskStatsStyled)
+	leftW := lipgloss.Width(leftSegment)
+	centerW := lipgloss.Width(centerSegment)
+	rightW := lipgloss.Width(rightBadge)
+
+	// Wide screens: single-line statusline + divider (strictly 2 rows)
+	if topWidth >= 90 && leftW+centerW+rightW+4 <= topWidth {
+		gapTotal := topWidth - leftW - centerW - rightW
+		gap1 := gapTotal / 2
+		gap2 := gapTotal - gap1
+		statusline := fmt.Sprintf("%s%s%s%s%s", leftSegment, strings.Repeat(" ", gap1), centerSegment, strings.Repeat(" ", gap2), rightBadge)
+		return lipgloss.JoinVertical(lipgloss.Left, statusline, divider)
 	}
 
-	var headerParts []string
-	headerParts = append(headerParts, topLine)
-	if authorLine != "" {
-		headerParts = append(headerParts, authorLine)
+	// Narrow screens (< 90 cols or when statusline exceeds width): 2 status rows + divider (strictly 3 rows)
+	gapLine1 := topWidth - leftW - rightW
+	if gapLine1 < 1 {
+		gapLine1 = 1
 	}
-	headerParts = append(headerParts, targetLine, diskSection, divider)
+	line1 := fmt.Sprintf("%s%s%s", leftSegment, strings.Repeat(" ", gapLine1), rightBadge)
+	if lipgloss.Width(line1) > topWidth {
+		line1 = lipgloss.NewStyle().MaxWidth(topWidth).Render(line1)
+	}
+	line2 := centerSegment
+	if lipgloss.Width(line2) > topWidth {
+		line2 = lipgloss.NewStyle().MaxWidth(topWidth).Render(line2)
+	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, headerParts...)
+	return lipgloss.JoinVertical(lipgloss.Left, line1, line2, divider)
 }
 
-// renderLeftPane renders the list of detected modules with statuses, counts, and sizes.
+// renderLeftPane renders the tree-structured subsystems list grouped by category.
 func (m *Model) renderLeftPane(width, height int) string {
 	titleStyle := PaneTitleInactive
 	borderStyle := InactivePaneBorder
@@ -144,69 +112,120 @@ func (m *Model) renderLeftPane(width, height int) string {
 		borderStyle = ActivePaneBorder
 	}
 
-	title := titleStyle.Render(fmt.Sprintf("Modules [%d]", len(m.modules)))
+	titleText := fmt.Sprintf("SUBSYSTEMS [%d DETECTED]", len(m.modules))
+	title := titleStyle.Render(titleText)
 
 	var lines []string
 	lines = append(lines, title)
 
-	visibleRows := height - 1
-	if visibleRows < 1 {
-		visibleRows = 1
+	if len(m.modules) == 0 {
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  No subsystems detected."))
+		for len(lines) < height {
+			lines = append(lines, "")
+		}
+		if len(lines) > height {
+			lines = lines[:height]
+		}
+		content := strings.Join(lines, "\n")
+		return borderStyle.Width(width).Height(height).Render(content)
 	}
 
-	start := m.moduleScrollOff
-	end := start + visibleRows
-	if end > len(m.modules) {
-		end = len(m.modules)
+	// Group module indices by category preserving order
+	var categoryOrder []string
+	catModules := make(map[string][]int)
+
+	for i, mod := range m.modules {
+		catTitle := formatCategoryTitle(mod.Module.Category())
+		if len(catModules[catTitle]) == 0 {
+			categoryOrder = append(categoryOrder, catTitle)
+		}
+		catModules[catTitle] = append(catModules[catTitle], i)
 	}
 
-	for i := start; i < end; i++ {
-		mod := m.modules[i]
-		isActive := (i == m.activeModuleIdx)
-
-		// Checkbox indicator
-		cb := "[ ]"
-		if mod.IsAllSelected() {
-			cb = "[x]"
-		} else if mod.IsAnySelected() {
-			cb = "[-]"
+	for groupIdx, catTitle := range categoryOrder {
+		modIndices := catModules[catTitle]
+		if len(modIndices) == 0 {
+			continue
 		}
 
-		cursorPrefix := "  "
-		if isActive {
-			cursorPrefix = "> "
+		// Subtle spacing between categories if vertical height allows
+		if groupIdx > 0 && len(lines) < height-len(modIndices)-1 {
+			lines = append(lines, "")
 		}
 
-		catBadge := RenderCategoryBadge(mod.Module.Category())
+		catHeader := lipgloss.NewStyle().Foreground(ColorMuted).Bold(true).Render("  " + catTitle)
+		lines = append(lines, catHeader)
 
-		var statusBadge string
-		if mod.Scanning {
-			statusBadge = lipgloss.NewStyle().Foreground(ColorWarning).Render("[Scanning...]")
-		} else if mod.Error != nil {
-			statusBadge = lipgloss.NewStyle().Foreground(ColorDanger).Render("[!]")
-		} else {
-			statusBadge = SizeBadgeStyle.Render(core.FormatBytes(mod.TotalBytes()))
-		}
+		for itemIdx, modIdx := range modIndices {
+			mod := m.modules[modIdx]
+			isActive := (modIdx == m.activeModuleIdx)
 
-		name := mod.Module.Name()
-		// Compute max available width for name
-		availForName := width - len(cursorPrefix) - len(cb) - lipgloss.Width(catBadge) - lipgloss.Width(statusBadge) - 6
-		if availForName < 4 {
-			availForName = 4
-		}
-		if len(name) > availForName {
-			name = name[:availForName-1] + "…"
-		}
+			isLastInGroup := (itemIdx == len(modIndices)-1)
+			treeGlyph := "├─ "
+			if isLastInGroup {
+				treeGlyph = "└─ "
+			}
 
-		rowContent := fmt.Sprintf("%s%s %s %s %s", cursorPrefix, cb, name, catBadge, statusBadge)
+			cb := "[ ] "
+			if mod.IsAllSelected() {
+				cb = "[x] "
+			} else if mod.IsAnySelected() {
+				cb = "[-] "
+			}
 
-		rowStyle := NormalRowStyle
-		if isActive {
-			rowStyle = CursorRowStyle
+			cursor := "  "
+			if isActive {
+				cursor = "> "
+			}
+
+			name := mod.Module.Name()
+
+			var statusBadge string
+			if mod.Scanning {
+				statusBadge = lipgloss.NewStyle().Foreground(ColorWarning).Render("[Scanning...]")
+			} else if mod.Error != nil {
+				statusBadge = lipgloss.NewStyle().Foreground(ColorDanger).Render("[!]")
+			} else {
+				bytes := mod.TotalBytes()
+				if bytes > 0 {
+					if isActive {
+						statusBadge = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true).Render(core.FormatBytes(bytes))
+					} else {
+						statusBadge = lipgloss.NewStyle().Foreground(ColorSuccess).Render(core.FormatBytes(bytes))
+					}
+				} else {
+					statusBadge = lipgloss.NewStyle().Foreground(ColorMuted).Render("0 B")
+				}
+			}
+
+			avail := width - 2
+			prefix := cursor + treeGlyph + cb
+			prefixW := lipgloss.Width(prefix)
+			badgeW := lipgloss.Width(statusBadge)
+
+			maxNameW := avail - prefixW - badgeW - 1
+			if maxNameW < 4 {
+				maxNameW = 4
+			}
+			if len(name) > maxNameW {
+				name = name[:maxNameW-1] + "…"
+			}
+
+			gap := avail - prefixW - len(name) - badgeW
+			if gap < 1 {
+				gap = 1
+			}
+
+			rowContent := fmt.Sprintf("%s%s%s%s", prefix, name, strings.Repeat(" ", gap), statusBadge)
+
+			var renderedRow string
+			if isActive {
+				renderedRow = lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Background(ColorHighlight).Render(rowContent)
+			} else {
+				renderedRow = NormalRowStyle.Render(rowContent)
+			}
+			lines = append(lines, renderedRow)
 		}
-		renderedRow := rowStyle.Render(rowContent)
-		rowParts := strings.Split(renderedRow, "\n")
-		lines = append(lines, rowParts[0])
 	}
 
 	for len(lines) < height {
@@ -242,19 +261,27 @@ func (m *Model) renderRightPane(width, height int) string {
 	}
 
 	active := m.ActiveModule()
-	titleText := "Item Inspector"
+	var leftText string
 	if active != nil {
-		titleText = fmt.Sprintf("Inspector: %s (%d/%d selected, %s)",
-			active.Module.Name(),
-			active.SelectedCount(),
-			active.ItemCount(),
-			core.FormatBytes(active.SelectedBytes()),
-		)
+		leftText = fmt.Sprintf("%s • %d ITEMS TERDETEKSI", strings.ToUpper(active.Module.Name()), active.ItemCount())
+	} else {
+		leftText = "ITEM INSPECTOR • 0 ITEMS TERDETEKSI"
 	}
-	title := titleStyle.Render(titleText)
+
+	leftTitle := titleStyle.Render(leftText)
+	tabHint := lipgloss.NewStyle().Foreground(ColorPrimary).Render("[Tab] switch pane")
+
+	availTitle := width - 2
+	gap := availTitle - lipgloss.Width(leftTitle) - lipgloss.Width(tabHint)
+	var titleLine string
+	if gap >= 1 {
+		titleLine = leftTitle + strings.Repeat(" ", gap) + tabHint
+	} else {
+		titleLine = leftTitle
+	}
 
 	var lines []string
-	lines = append(lines, title)
+	lines = append(lines, titleLine)
 
 	if active == nil || len(active.ScanRes.Items) == 0 {
 		var emptyMsg string
@@ -287,25 +314,25 @@ func (m *Model) renderRightPane(width, height int) string {
 	}
 
 	// Table column widths
-	colCheck := 5   // " [x] "
-	colSize := 11   // " 1024.0 MB "
-	colSafety := 11 // " [CAUTION] "
+	colSel := 6
 	colName := 28
-	if width < 80 {
+	if width < 85 {
 		colName = 18
 	}
-	colPath := width - colCheck - colName - colSize - colSafety - 6
-	if colPath < 6 {
-		colPath = 6
+	colSize := 12
+	colSafety := 14
+	colPath := width - colSel - colName - colSize - colSafety - 4
+	if colPath < 8 {
+		colPath = 8
 	}
 
 	// Table Header
-	headerFmt := fmt.Sprintf("  %-*s %-*s %-*s %-*s %s",
-		colCheck-2, "SEL",
-		colName, "NAME / ID",
-		colSize, "SIZE",
-		colSafety, "SAFETY",
-		"PATH / DETAILS",
+	headerFmt := fmt.Sprintf(" %-*s %-*s %-*s %-*s %s",
+		colSel, "SEL",
+		colName, "NAMA ITEM",
+		colSize, "UKURAN",
+		colSafety, "TINGKAT BAHAYA",
+		"DESKRIPSI RINGKAS / PATH",
 	)
 	thRendered := TableHeaderStyle.Width(width - 2).Render(headerFmt)
 	for _, thLine := range strings.Split(thRendered, "\n") {
@@ -337,6 +364,7 @@ func (m *Model) renderRightPane(width, height int) string {
 		if it.Selected {
 			cb = "[x]"
 		}
+		selCol := fmt.Sprintf("%s %s", cursorMark, cb)
 
 		name := it.Name
 		if len(name) > colName {
@@ -346,28 +374,28 @@ func (m *Model) renderRightPane(width, height int) string {
 		sizeStr := core.FormatBytes(it.Size)
 		safetyBadge := RenderSafetyBadge(it.Safety)
 
-		detail := it.Path
+		detail := it.Description
 		if detail == "" {
-			detail = it.Description
+			detail = it.Path
 		}
 		if len(detail) > colPath {
 			detail = detail[:colPath-1] + "…"
 		}
 
-		rowContent := fmt.Sprintf("%s %s %-*s %-*s %s %s",
-			cursorMark,
-			cb,
+		rowContent := fmt.Sprintf(" %-*s %-*s %-*s %-*s %s",
+			colSel, selCol,
 			colName, name,
 			colSize, sizeStr,
-			safetyBadge,
+			colSafety, safetyBadge,
 			detail,
 		)
 
-		rowStyle := NormalRowStyle
+		var renderedRow string
 		if isCursor {
-			rowStyle = CursorRowStyle
+			renderedRow = CursorRowStyle.Render(rowContent)
+		} else {
+			renderedRow = NormalRowStyle.Render(rowContent)
 		}
-		renderedRow := rowStyle.Render(rowContent)
 		rowParts := strings.Split(renderedRow, "\n")
 		lines = append(lines, rowParts[0])
 	}
@@ -395,67 +423,71 @@ func (m *Model) renderRightPane(width, height int) string {
 	return rendered
 }
 
-// renderFooter produces the keybinding command legend and total selection summary.
+// renderFooter produces the compact Nordic command bar and total reclaimable summary.
 func (m *Model) renderFooter() string {
 	footWidth := m.width
 	if footWidth < 40 {
 		footWidth = 40
 	}
 
-	var keys []string
-	var summary string
+	bullet := lipgloss.NewStyle().Foreground(ColorSubtle).Render(" • ")
 
-	if footWidth >= 115 {
+	var keys []string
+	if footWidth >= 130 {
 		keys = []string{
-			RenderKeyHelp("[Tab]", "pane"),
-			RenderKeyHelp("[Space]", "toggle"),
-			RenderKeyHelp("[a]", "all"),
-			RenderKeyHelp("[s]", "rescan"),
-			RenderKeyHelp("[d]", "dry-run"),
-			RenderKeyHelp("[Enter]", "clean"),
-			RenderKeyHelp("[?]", "info"),
-			RenderKeyHelp("[q]", "quit"),
+			RenderKeyHelp("j/k", "navigasi"),
+			RenderKeyHelp("Space", "toggle"),
+			RenderKeyHelp("a", "all"),
+			RenderKeyHelp("s", "rescan"),
+			RenderKeyHelp("d", "dry-run"),
+			RenderKeyHelp("Enter", "clean"),
+			RenderKeyHelp("?", "info"),
+			RenderKeyHelp("q", "quit"),
 		}
-		summary = fmt.Sprintf("Selected: %s / %s (%d items)",
-			core.FormatBytes(m.TotalSelectedBytes()),
-			core.FormatBytes(m.TotalScannedBytes()),
-			m.TotalSelectedCount(),
-		)
-	} else if footWidth >= 85 {
+	} else if footWidth >= 100 {
 		keys = []string{
-			RenderKeyHelp("[Tab]", "pane"),
-			RenderKeyHelp("[Space]", "sel"),
-			RenderKeyHelp("[d]", "dry-run"),
-			RenderKeyHelp("[Enter]", "clean"),
-			RenderKeyHelp("[?]", "info"),
-			RenderKeyHelp("[q]", "quit"),
+			RenderKeyHelp("j/k", "nav"),
+			RenderKeyHelp("Space", "toggle"),
+			RenderKeyHelp("a", "all"),
+			RenderKeyHelp("d", "dry-run"),
+			RenderKeyHelp("Enter", "clean"),
+			RenderKeyHelp("?", "info"),
+			RenderKeyHelp("q", "quit"),
 		}
-		summary = fmt.Sprintf("Sel: %s (%d)",
-			core.FormatBytes(m.TotalSelectedBytes()),
-			m.TotalSelectedCount(),
-		)
 	} else {
 		keys = []string{
-			RenderKeyHelp("[Space]", "sel"),
-			RenderKeyHelp("[d]", "dry"),
-			RenderKeyHelp("[Enter]", "clean"),
-			RenderKeyHelp("[?]", "info"),
-			RenderKeyHelp("[q]", "quit"),
+			RenderKeyHelp("Space", "toggle"),
+			RenderKeyHelp("d", "dry"),
+			RenderKeyHelp("Enter", "clean"),
+			RenderKeyHelp("?", "info"),
+			RenderKeyHelp("q", "quit"),
 		}
-		summary = fmt.Sprintf("%s (%d)",
-			core.FormatBytes(m.TotalSelectedBytes()),
-			m.TotalSelectedCount(),
-		)
 	}
 
-	legend := strings.Join(keys, KeyDivider.String())
-	summaryStyled := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(summary)
+	legend := strings.Join(keys, bullet)
 
-	gap := footWidth - lipgloss.Width(legend) - lipgloss.Width(summaryStyled) - 4
+	var summaryStyled string
+	reclaimableLabel := lipgloss.NewStyle().Foreground(ColorMuted).Render("Total Reclaimable: ")
+	selBytes := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(core.FormatBytes(m.TotalSelectedBytes()))
+	slash := lipgloss.NewStyle().Foreground(ColorMuted).Render(" / ")
+	totBytes := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(core.FormatBytes(m.TotalScannedBytes()))
+
+	availInner := footWidth - 4
+	if availInner < 10 {
+		availInner = 10
+	}
+
+	if lipgloss.Width(legend)+lipgloss.Width(reclaimableLabel)+lipgloss.Width(selBytes)+lipgloss.Width(slash)+lipgloss.Width(totBytes)+2 <= availInner {
+		summaryStyled = fmt.Sprintf("%s%s%s%s", reclaimableLabel, selBytes, slash, totBytes)
+	} else {
+		summaryStyled = fmt.Sprintf("%s%s%s", selBytes, slash, totBytes)
+	}
+
+	gap := availInner - lipgloss.Width(legend) - lipgloss.Width(summaryStyled)
 	if gap < 1 {
 		gap = 1
 	}
 
-	content := lipgloss.JoinHorizontal(lipgloss.Center, legend, strings.Repeat(" ", gap), summaryStyled)
+	content := fmt.Sprintf("%s%s%s", legend, strings.Repeat(" ", gap), summaryStyled)
 	return FooterContainer.Width(footWidth).Render(content)
 }

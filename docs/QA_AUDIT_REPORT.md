@@ -32,6 +32,9 @@ A comprehensive quality assurance and security audit was conducted on Sweep, foc
 | **Viewport Height Invariant** | Strict `lipgloss.Height(m.View()) <= m.height` | Empirically verified across all modes & 54x13..200x60 dimensions | **PASS** |
 | **Header Visibility Guarantee** | Zero off-screen scrolling; line 0 banner & disk meter | Top banner "SWEEP" on line 0; Root disk usage meter on lines 0..3 | **PASS** |
 | **Auto-Scroll & Trailing Lines**| No trailing newlines causing auto-scroll | Strict line-budget truncation & join without trailing `\n` | **PASS** |
+| **Concept 2 Nordic Minimalist TUI**| Telescope statusline, tree subsystems, tabular inspector, bullet footer | Verified & matching approved mockup; clean Nordic palette (#263449) | **PASS** |
+| **Statusline Height Bound**   | Strictly 2 rows (>=90 cols), 3 rows (<90 cols) | Empirically verified across all viewport widths; zero overflow | **PASS** |
+| **Subsystem Tree Grouping**   | Box-drawing tree glyphs (`├─`, `└─`) & category priority rank | Categorized (pkg, containers, filesystem) with clean indentation | **PASS** |
 
 ---
 
@@ -287,9 +290,69 @@ All active application view modes were verified against the strict height constr
 
 ---
 
-## 9. Audit Verdict
+## 9. Concept 2 'Nordic Minimalist' Verification & UI Audit
 
-All acceptance criteria for Tasks `t_052543e2`, `t_590217e6`, and `t_295636f4` have been fully satisfied and empirically verified. Sweep demonstrates strict viewport height clamping (`Height(View) <= m.height`) preventing off-screen header scrolling across all standard and edge-case terminal geometries, permanent header & root disk meter visibility, robust root filesystem metrics calculation, explicit system scope notices, responsive modal dialogs, zero unicode emoji reliance, 100% race-free concurrency, clean static analysis, and functional binary compilation (`bin/sweep`).
+### 9.1 Concept 2 Architecture & Visual Design
+Concept 2 ("Nordic Minimalist") redesigns the Sweep TUI layout to deliver visual elegance, high information density, and strict vertical constraint management inspired by modern CLI tools (such as Telescope / Neovim and btop):
+- **Palette & Borders:**
+  - Active pane border: Cyan primary (`#06B6D4` - `ColorPrimary`)
+  - Inactive pane border: Subtle Nordic slate (`#263449` - `ColorNordicBorder`)
+  - Statusline divider: Single-row horizontal rule in Nordic slate (`#263449`)
+- **Telescope-Style Top Statusline:**
+  - Left segment: `SWEEP // <Distro> // by Efzyn` (high-contrast cyan title, muted slash dividers, author attribution).
+  - Center segment: `Root (/): <Pct>% Used [Total: <Total> • Sisa: <Free>]`.
+  - Right segment: High-contrast safeguard badge (`[BTRFS SAFEGUARD: ACTIVE]` in green or `[BTRFS SAFEGUARD: INACTIVE]` in muted gray).
+  - Dynamic responsive height: Strictly 2 rows (statusline + divider) on screens >= 90 cols, and 3 rows on narrow screens (< 90 cols).
+- **Tree-Structured Subsystems List (Left Pane):**
+  - Category grouping ordered deterministically by `CategoryPriority()`:
+    1. `PACKAGE MANAGERS` (Pacman, Flatpak, APT, DNF)
+    2. `CONTAINERS & VIRTUALIZATION` (Docker, Podman)
+    3. `FILESYSTEM & SYSTEM` (Snapper, Btrfs)
+    4. `OTHER SUBSYSTEMS`
+  - Clean box-drawing tree glyphs (`├─` for intermediate items, `└─` for final items in each category group).
+  - Selection checkboxes (`[x] `, `[-] `, `[ ] `) and cursor marker (`> `).
+- **Refined Tabular Item Inspector (Right Pane):**
+  - Header: Active subsystem title with item count (`PACMAN TEST • 3 ITEMS TERDETEKSI`) paired with right-aligned `[Tab] switch pane` hint.
+  - Column alignment: `SEL`, `NAMA ITEM`, `UKURAN`, `TINGKAT BAHAYA`, `DESKRIPSI RINGKAS / PATH`.
+  - Safety level badges: `[SAFE]`, `[CAUTION]`, `[HIGH RISK]` rendered without emojis.
+- **Minimalist Bullet-Separated Footer:**
+  - Command bar: `j/k navigasi • Space toggle • a all • s rescan • d dry-run • Enter clean • ? info • q quit`.
+  - Reclaimable bytes: `Total Reclaimable: <SelectedBytes> / <TotalBytes>`.
+  - Responsive multi-tier fallback for wide (>=130), medium (100..129), and compact (<100) widths.
+
+### 9.2 Verification Matrix & Automated Regression Protection
+Empirically validated through unit tests in `internal/tui/tui_test.go`:
+
+| Component / Subsystem | Verification Criteria | Test Case | Status |
+|---|---|---|---|
+| **Top Statusline (Wide)** | `SWEEP // <Distro> // by Efzyn`, Root stats, `[BTRFS SAFEGUARD: ACTIVE]`, strictly 2 rows | `TestTUI_Concept2_NordicStatuslineAndTreePane` | **PASS** |
+| **Top Statusline (Narrow)** | 2 status rows + divider (max 3 rows) on < 90 cols | `TestTUI_Concept2_NarrowScreenStatusline` | **PASS** |
+| **Distro Fallback Matrix** | Nil distro -> "Linux", Family only -> "Linux (Arch)", Full -> "CachyOS (Arch)" | `TestTUI_Concept2_ComprehensiveQA` | **PASS** |
+| **Safeguard Badge Toggle** | Active when snapper available, Inactive when unavailable | `TestTUI_Concept2_ComprehensiveQA` | **PASS** |
+| **Tree Subsystems Pane** | Category grouping, `├─` and `└─` glyphs, active cursor `> ` | `TestTUI_Concept2_NordicStatuslineAndTreePane` | **PASS** |
+| **Subsystem Sorting** | Pkg Managers (1) < Containers (2) < System (3) < Other (4) | `TestTUI_Concept2_ComprehensiveQA` | **PASS** |
+| **Item Inspector Table** | `[Tab] switch pane`, headers `SEL`, `NAMA ITEM`, `UKURAN`, `TINGKAT BAHAYA` | `TestTUI_Concept2_NordicStatuslineAndTreePane` | **PASS** |
+| **Footer Responsiveness** | Breakpoints at 130, 100 cols with `•` bullet separation | `TestTUI_Concept2_ComprehensiveQA` | **PASS** |
+| **Zero Unicode Emojis** | 0 emoji runes across Main, Modal, About, Executing, Done views | `TestTUI_ZeroEmojisValidation` | **PASS** |
+| **Viewport Height Invariant** | Strict `lipgloss.Height(m.View()) <= m.height` across all view modes | `TestTUI_StrictViewportHeightConstraint`, `TestTUI_AllViewModes_HeightInvariant` | **PASS** |
+| **Live Binary Execution** | `bin/sweep --scan-only` & `bin/sweep --dry-run` 37 items (11.88 GB) | Host CLI dry-run execution | **PASS** |
+
+### 9.3 Zero Regression & Concurrency Audit
+- `go test -race ./...`: 0 race conditions, 19/19 TUI unit tests passing.
+- `go vet ./...`: 0 warnings or issues.
+- `gofmt -s -l .`: 100% formatted.
+- `make build`: Binaries compile cleanly with version ldflags.
+
+---
+
+## 10. Audit Verdict
+
+All acceptance criteria for Tasks `t_052543e2`, `t_590217e6`, `t_295636f4`, and `t_fb1dfbd7` have been fully satisfied and empirically verified. Sweep demonstrates:
+1. Complete fidelity to Concept 2 "Nordic Minimalist" with the Telescope-style statusline, tree-structured Subsystems pane (`├─`/`└─`), tabular Item Inspector, and bullet-separated footer.
+2. Strict viewport height clamping (`lipgloss.Height(m.View()) <= m.height`) preventing off-screen scrolling across all terminal geometries (54x13 up to 200x60).
+3. Zero unicode emoji reliance, employing high-contrast text badges and clean box-drawing glyphs.
+4. Robust read-only scanning safety, zero shell interpolation (`sh -c`/`bash -c`), parameterised execution, and safe dry-run simulation.
+5. 100% race-free concurrency, clean static analysis (`go vet`, `gofmt`), and clean production binary compilation (`bin/sweep`).
 
 **Signed off by:**
 Sentry (QA Engineer & Code Reviewer)
