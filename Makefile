@@ -4,7 +4,14 @@
 SHELL := /bin/bash
 BIN_DIR := bin
 BINARY_NAME := sweep
+GUI_BINARY_NAME := sweep-gui
 TARGET := $(BIN_DIR)/$(BINARY_NAME)
+GUI_TARGET := $(BIN_DIR)/$(GUI_BINARY_NAME)
+
+PREFIX ?= /usr/local
+DESTDIR ?=
+BINDIR ?= $(PREFIX)/bin
+SHAREDIR ?= /usr/share
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0-dev")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -17,15 +24,34 @@ LDFLAGS := -s -w \
 
 GO ?= go
 
-.PHONY: all build test lint fmt fmt-check clean run cross-compile help
+.PHONY: all build build-gui build-all build-frontend test lint vet fmt fmt-check clean run cross-compile install uninstall validate-desktop help
 
 all: build
 
-## build: Compile the sweep binary with version ldflags
+## build: Compile the sweep CLI/TUI binary with version ldflags
 build:
 	@mkdir -p $(BIN_DIR)
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(TARGET) ./cmd/sweep
 	@echo "Build complete: $(TARGET)"
+
+## build-gui: Compile the desktop GUI binary with WebKit2GTK support
+build-gui:
+	@if [ ! -d "cmd/sweep-gui/frontend/dist" ]; then \
+		echo "Frontend dist not found, building frontend..."; \
+		$(MAKE) build-frontend; \
+	fi
+	@mkdir -p $(BIN_DIR)
+	$(GO) build -tags "production,webkit2_41" -ldflags "$(LDFLAGS)" -o $(GUI_TARGET) ./cmd/sweep-gui
+	@echo "GUI build complete: $(GUI_TARGET)"
+
+## build-all: Compile both CLI/TUI and Desktop GUI binaries
+build-all: build build-gui
+	@echo "Build all complete: $(TARGET) and $(GUI_TARGET)"
+
+## build-frontend: Build frontend web assets via pnpm and sync to cmd/sweep-gui
+build-frontend:
+	cd frontend && pnpm install --frozen-lockfile && pnpm build
+	@echo "Frontend build and sync complete."
 
 ## test: Run all unit and integration tests with race detection
 test:
@@ -46,12 +72,58 @@ fmt:
 fmt-check:
 	@test -z "$$(gofmt -s -l . | tee /dev/stderr)" || (echo "Formatting issues detected. Run 'make fmt' to fix." && exit 1)
 
-## cross-compile: Cross-compile sweep binaries for standard Linux architectures
+## validate-desktop: Validate the freedesktop .desktop entry
+validate-desktop:
+	@command -v desktop-file-validate >/dev/null 2>&1 || (echo "desktop-file-validate not found; skipping" && exit 0)
+	desktop-file-validate build/linux/io.github.efzynx.sweep.desktop
+
+## cross-compile: Cross-compile sweep CLI binaries for standard Linux architectures
 cross-compile:
 	@mkdir -p $(BIN_DIR)
 	GOOS=linux GOARCH=amd64 $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/sweep
 	GOOS=linux GOARCH=arm64 $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/sweep
 	@echo "Cross-compilation complete: $(BIN_DIR)/$(BINARY_NAME)-linux-amd64, $(BIN_DIR)/$(BINARY_NAME)-linux-arm64"
+
+## install: Install sweep binaries, .desktop entry, and icons to system directories
+install:
+	@install -d -m 755 $(DESTDIR)$(BINDIR)
+	@install -d -m 755 $(DESTDIR)$(SHAREDIR)/applications
+	@install -d -m 755 $(DESTDIR)$(SHAREDIR)/icons/hicolor/scalable/apps
+	@install -d -m 755 $(DESTDIR)$(SHAREDIR)/icons/hicolor/128x128/apps
+	@install -d -m 755 $(DESTDIR)$(SHAREDIR)/icons/hicolor/256x256/apps
+	@install -d -m 755 $(DESTDIR)$(SHAREDIR)/icons/hicolor/512x512/apps
+	@install -d -m 755 $(DESTDIR)$(SHAREDIR)/pixmaps
+	@if [ -f $(TARGET) ]; then \
+		install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/$(BINARY_NAME); \
+		echo "Installed $(TARGET) -> $(DESTDIR)$(BINDIR)/$(BINARY_NAME)"; \
+	fi
+	@if [ -f $(GUI_TARGET) ]; then \
+		install -m 755 $(GUI_TARGET) $(DESTDIR)$(BINDIR)/$(GUI_BINARY_NAME); \
+		echo "Installed $(GUI_TARGET) -> $(DESTDIR)$(BINDIR)/$(GUI_BINARY_NAME)"; \
+	fi
+	@install -m 644 build/linux/io.github.efzynx.sweep.desktop $(DESTDIR)$(SHAREDIR)/applications/io.github.efzynx.sweep.desktop
+	@install -m 644 build/linux/io.github.efzynx.sweep.svg $(DESTDIR)$(SHAREDIR)/icons/hicolor/scalable/apps/io.github.efzynx.sweep.svg
+	@install -m 644 build/linux/io.github.efzynx.sweep-128x128.png $(DESTDIR)$(SHAREDIR)/icons/hicolor/128x128/apps/io.github.efzynx.sweep.png
+	@install -m 644 build/linux/io.github.efzynx.sweep-256x256.png $(DESTDIR)$(SHAREDIR)/icons/hicolor/256x256/apps/io.github.efzynx.sweep.png
+	@install -m 644 build/linux/io.github.efzynx.sweep-512x512.png $(DESTDIR)$(SHAREDIR)/icons/hicolor/512x512/apps/io.github.efzynx.sweep.png
+	@install -m 644 build/linux/io.github.efzynx.sweep.png $(DESTDIR)$(SHAREDIR)/pixmaps/io.github.efzynx.sweep.png
+	@echo "Installation complete."
+	@if [ -z "$(DESTDIR)" ]; then \
+		command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database $(SHAREDIR)/applications || true; \
+		command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t $(SHAREDIR)/icons/hicolor || true; \
+	fi
+
+## uninstall: Remove installed sweep binaries, .desktop entry, and icons
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/$(BINARY_NAME)
+	rm -f $(DESTDIR)$(BINDIR)/$(GUI_BINARY_NAME)
+	rm -f $(DESTDIR)$(SHAREDIR)/applications/io.github.efzynx.sweep.desktop
+	rm -f $(DESTDIR)$(SHAREDIR)/icons/hicolor/scalable/apps/io.github.efzynx.sweep.svg
+	rm -f $(DESTDIR)$(SHAREDIR)/icons/hicolor/128x128/apps/io.github.efzynx.sweep.png
+	rm -f $(DESTDIR)$(SHAREDIR)/icons/hicolor/256x256/apps/io.github.efzynx.sweep.png
+	rm -f $(DESTDIR)$(SHAREDIR)/icons/hicolor/512x512/apps/io.github.efzynx.sweep.png
+	rm -f $(DESTDIR)$(SHAREDIR)/pixmaps/io.github.efzynx.sweep.png
+	@echo "Uninstall complete."
 
 ## clean: Remove compiled binaries and build artifacts
 clean:

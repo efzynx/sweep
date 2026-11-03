@@ -5,7 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -27,6 +29,7 @@ func main() {
 		versionFlag  bool
 		dryRunFlag   bool
 		scanOnlyFlag bool
+		guiFlag      bool
 		configPath   string
 	)
 
@@ -34,6 +37,7 @@ func main() {
 	flag.BoolVar(&versionFlag, "v", false, "Print version information and exit (shorthand)")
 	flag.BoolVar(&dryRunFlag, "dry-run", false, "Simulate cleaning of detected items without deleting them")
 	flag.BoolVar(&scanOnlyFlag, "scan-only", false, "Scan system for cleanable items and print summary without cleaning")
+	flag.BoolVar(&guiFlag, "gui", false, "Launch desktop GUI application")
 	flag.StringVar(&configPath, "config", "", "Path to custom configuration file")
 
 	flag.Usage = func() {
@@ -43,6 +47,7 @@ func main() {
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  sweep                  # Launch interactive TUI\n")
+		fmt.Fprintf(os.Stderr, "  sweep --gui            # Launch desktop GUI\n")
 		fmt.Fprintf(os.Stderr, "  sweep --scan-only      # Perform read-only scan and display reclaimable space\n")
 		fmt.Fprintf(os.Stderr, "  sweep --dry-run        # Perform scan and simulate cleanup\n")
 		fmt.Fprintf(os.Stderr, "  sweep --version        # Display version details\n")
@@ -53,6 +58,17 @@ func main() {
 	if versionFlag {
 		fmt.Printf("sweep version %s (commit: %s, built: %s)\n", Version, Commit, BuildDate)
 		os.Exit(0)
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	if guiFlag {
+		if err := launchGUI(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	cfg, err := core.LoadConfig(configPath)
@@ -66,9 +82,6 @@ func main() {
 			cm.SetConfig(cfg)
 		}
 	}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 
 	if scanOnlyFlag || dryRunFlag {
 		runCLI(ctx, cfg, dryRunFlag)
@@ -161,4 +174,37 @@ func runCLI(ctx context.Context, cfg *core.Config, dryRun bool) {
 
 		fmt.Printf("\nDry-run complete. Total space reclaimable: %s\n", core.FormatBytes(totalFreed))
 	}
+}
+
+func launchGUI(ctx context.Context) error {
+	var candidates []string
+
+	// 1. Check in same directory as current executable
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		candidates = append(candidates, filepath.Join(exeDir, "sweep-gui"))
+	}
+
+	// 2. Check local working directories
+	candidates = append(candidates, "sweep-gui", "./bin/sweep-gui", "./build/bin/sweep-gui")
+
+	// 3. Check system PATH
+	if path, err := exec.LookPath("sweep-gui"); err == nil {
+		candidates = append([]string{path}, candidates...)
+	}
+
+	for _, cand := range candidates {
+		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() && (fi.Mode()&0111 != 0) {
+			cmd := exec.CommandContext(ctx, cand)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Stdin = os.Stdin
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed running sweep-gui (%s): %w", cand, err)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("Sweep GUI binary (sweep-gui) not found.\n\nTo build and launch the desktop GUI:\n  1. Ensure webkit2gtk-4.1 is installed on your system\n  2. Build: go build -tags \"webkit2_41\" -o bin/sweep-gui ./cmd/sweep-gui\n  3. Run:   sweep --gui (or ./bin/sweep-gui)")
 }

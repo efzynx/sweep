@@ -1,8 +1,10 @@
 bin/
 dist/
+release/
 *.o
 *.a
 *.so
 .DS_Store
 .directory
 *.test
+node_modules/

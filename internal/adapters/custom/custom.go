@@ -219,8 +219,8 @@ func (m *Module) Clean(ctx context.Context, items []core.CleanableItem, opts cor
 		}
 
 		cleanPath := filepath.Clean(item.Path)
-		// Safety safeguards: refuse to delete root, dot, or user home directory root
-		if cleanPath == "/" || cleanPath == "." || cleanPath == ".." {
+		// Safety safeguards: refuse to delete dangerous system root paths or user home directory root
+		if core.IsDangerousPath(cleanPath) {
 			cleanRes.Errors = append(cleanRes.Errors, fmt.Errorf("refusing to delete dangerous path: %s", cleanPath))
 			continue
 		}

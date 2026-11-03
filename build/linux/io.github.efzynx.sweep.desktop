@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=Sweep
+GenericName=System Cleaner
+Comment=Modern Linux System Cleaner & Maintenance Tool
+Exec=sweep-gui
+Icon=io.github.efzynx.sweep
+Terminal=false
+Categories=System;Filesystem;
+Keywords=system;cleaner;sweep;maintenance;disk;cache;storage;
+StartupNotify=true
+StartupWMClass=sweep-gui

@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Set up Node.js & pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Set up Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: 'frontend/pnpm-lock.yaml'
+
+      - name: Install System GUI & Packaging Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev desktop-file-utils
+
+      - name: Validate Desktop File
+        run: desktop-file-validate build/linux/io.github.efzynx.sweep.desktop
+
+      - name: Build & Sync Frontend
+        run: |
+          cd frontend
+          pnpm install --frozen-lockfile
+          pnpm check
+          pnpm build
+          cd ..
+
+      - name: Build Release Binaries & Packages
+        run: |
+          mkdir -p release
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          echo "Building CLI binaries..."
+          for ARCH in amd64 arm64; do
+            echo "Building CLI for linux/${ARCH}..."
+            CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build \
+              -ldflags "-s -w -X main.Version=${TAG_NAME} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE}" \
+              -o release/sweep-linux-${ARCH} ./cmd/sweep
+            
+            # Create CLI tarball
+            tar -czf release/sweep-${TAG_NAME}-linux-${ARCH}.tar.gz -C release sweep-linux-${ARCH} -C ../ README.md LICENSE
+          done
+
+          echo "Building Desktop GUI binary (linux/amd64)..."
+          go build -tags "production,webkit2_41" \
+            -ldflags "-s -w -X main.Version=${TAG_NAME} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE}" \
+            -o release/sweep-gui-linux-amd64 ./cmd/sweep-gui
+
+          # Package GUI bundle including desktop entry and icons
+          GUI_BUNDLE_DIR="release/sweep-gui-${TAG_NAME}-linux-amd64"
+          mkdir -p "${GUI_BUNDLE_DIR}"
+          cp release/sweep-gui-linux-amd64 "${GUI_BUNDLE_DIR}/sweep-gui"
+          cp release/sweep-linux-amd64 "${GUI_BUNDLE_DIR}/sweep"
+          cp README.md LICENSE "${GUI_BUNDLE_DIR}/"
+          mkdir -p "${GUI_BUNDLE_DIR}/build"
+          cp -r build/linux "${GUI_BUNDLE_DIR}/build/"
+          
+          tar -czf release/sweep-gui-${TAG_NAME}-linux-amd64.tar.gz -C release "sweep-gui-${TAG_NAME}-linux-amd64"
+
+          # Generate SHA256 checksums
+          cd release
+          sha256sum sweep-*.tar.gz sweep-linux-* sweep-gui-linux-* > SHA256SUMS.txt
+          cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.tar.gz
+            release/sweep-linux-*
+            release/sweep-gui-linux-*
+            release/SHA256SUMS.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "sweep",
+  "outputfilename": "sweep-gui",
+  "frontend:dir": "frontend",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm build",
+  "frontend:dev:watcher": "pnpm dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Efzyn"
+  },
+  "build:tags": "webkit2_41",
+  "info": {
+    "companyName": "Efzyn",
+    "productName": "Sweep",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright © 2026 Efzyn",
+    "comments": "Modern Multi-Distro Linux System Cleaner"
+  }
+}

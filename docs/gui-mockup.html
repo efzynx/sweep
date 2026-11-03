@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sweep Desktop GUI - Phase 3 Design Mockup</title>
+<style>
+  :root {
+    --bg-desktop: #07090e;
+    --bg-window: #0c1017;
+    --bg-sidebar: #090d14;
+    --bg-card: #121824;
+    --bg-card-hover: #172030;
+    --border-subtle: #1c2536;
+    --border-focus: #06b6d4;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --cyan: #06b6d4;
+    --cyan-dim: rgba(6, 182, 212, 0.12);
+    --cyan-glow: rgba(6, 182, 212, 0.25);
+    --green: #10b981;
+    --green-dim: rgba(16, 185, 129, 0.12);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245, 158, 11, 0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239, 68, 68, 0.12);
+    --purple: #a855f7;
+    --purple-dim: rgba(168, 85, 247, 0.12);
+    --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--bg-desktop);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+
+  /* Presentation Top Bar */
+  .preview-control-bar {
+    width: 100%;
+    max-width: 1140px;
+    background: var(--bg-window);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .meta-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-badge {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    letter-spacing: 0.5px;
+  }
+
+  .brand-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .brand-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .view-switchers {
+    display: flex;
+    gap: 8px;
+    background: #080b11;
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .view-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+
+  .view-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .view-btn.active {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    box-shadow: 0 0 10px var(--cyan-glow);
+  }
+
+  /* Desktop Window Container */
+  .desktop-app-window {
+    width: 100%;
+    max-width: 1140px;
+    height: 720px;
+    background: var(--bg-window);
+    border: 1px solid #1f2a3d;
+    border-radius: 12px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.03);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Window Titlebar (Linux / Wayland / GTK client-side decorations) */
+  .window-titlebar {
+    height: 44px;
+    background: #080c13;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    user-select: none;
+  }
+
+  .titlebar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .app-icon-wrap {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--cyan-dim);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cyan);
+  }
+
+  .titlebar-app-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+
+  .titlebar-version {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .titlebar-center {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .distro-pill {
+    background: var(--purple-dim);
+    color: var(--purple);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .safeguard-pill {
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .titlebar-controls {
+    display: flex;
+    gap: 8px;
+  }
+
+  .win-btn {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #1e293b;
+    border: 1px solid #334155;
+    cursor: pointer;
+  }
+  .win-close { background: #ef4444; border-color: #dc2626; }
+  .win-min { background: #f59e0b; border-color: #d97706; }
+  .win-max { background: #10b981; border-color: #059669; }
+
+  /* App Storage Banner (Dual Mount Telemetry) */
+  .storage-telemetry-banner {
+    background: #090e17;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 12px 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .disk-stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .disk-header-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+  }
+
+  .disk-name {
+    font-weight: 700;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .disk-values {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+
+  .disk-meter-track {
+    height: 7px;
+    background: #162030;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .disk-meter-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+
+  .fill-root { background: linear-gradient(90deg, #06b6d4, #0891b2); }
+  .fill-home { background: linear-gradient(90deg, #a855f7, #9333ea); }
+
+  .storage-target-filter {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+
+  .filter-label {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .segmented-filter {
+    display: flex;
+    background: #101622;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 2px;
+  }
+
+  .seg-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-mono);
+  }
+
+  .seg-btn.active {
+    background: var(--cyan);
+    color: #041017;
+  }
+
+  /* Main Split Workspace */
+  .app-workspace {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* Left Subsystem Sidebar */
+  .sidebar-pane {
+    width: 290px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .sidebar-section-title {
+    padding: 12px 16px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .module-list-item {
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background 0.15s;
+  }
+
+  .module-list-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .module-list-item.active {
+    background: #111723;
+    border-left-color: var(--cyan);
+  }
+
+  .module-item-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .custom-checkbox {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .custom-checkbox.checked {
+    background: var(--cyan);
+    border-color: var(--cyan);
+    color: #041017;
+  }
+
+  .module-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #cbd5e1;
+  }
+
+  .module-list-item.active .module-name {
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .module-badge-size {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+
+  .module-badge-size.has-reclaim {
+    color: var(--cyan);
+    font-weight: 600;
+  }
+
+  /* Right Main Content Panel */
+  .main-content-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-window);
+    overflow: hidden;
+  }
+
+  .content-toolbar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .module-heading-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .current-module-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .current-module-count {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .search-input-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #080c13;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 6px 10px;
+    width: 200px;
+  }
+
+  .search-input-box input {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 12px;
+    width: 100%;
+    outline: none;
+  }
+
+  .btn-secondary {
+    background: #111723;
+    border: 1px solid var(--border-subtle);
+    color: #cbd5e1;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+  }
+
+  .btn-secondary:hover {
+    background: #162030;
+    color: #fff;
+  }
+
+  /* Table Container */
+  .table-scroll-container {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .clean-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .clean-items-table th {
+    position: sticky;
+    top: 0;
+    background: #090e17;
+    padding: 8px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    z-index: 10;
+  }
+
+  .clean-items-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(28, 37, 54, 0.5);
+    color: #cbd5e1;
+  }
+
+  .clean-items-table tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .clean-items-table tr.selected td {
+    background: rgba(6, 182, 212, 0.04);
+  }
+
+  .item-name-cell {
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .item-path-sub {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .tag-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+
+  .tag-safe { background: var(--green-dim); color: var(--green); border: 1px solid rgba(16, 185, 129, 0.3); }
+  .tag-caution { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.3); }
+  .tag-high { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+  .tag-storage-home { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(168, 85, 247, 0.3); }
+  .tag-storage-root { background: var(--cyan-dim); color: var(--cyan); border: 1px solid rgba(6, 182, 212, 0.3); }
+
+  /* App Bottom Action Bar */
+  .app-bottom-bar {
+    height: 56px;
+    background: #080c13;
+    border-top: 1px solid var(--border-subtle);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .selection-summary-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .selected-stat-main {
+    font-size: 13px;
+    color: #e2e8f0;
+  }
+
+  .selected-stat-main strong {
+    font-size: 15px;
+    color: var(--cyan);
+    font-family: var(--font-mono);
+  }
+
+  .selected-breakdown-pills {
+    display: flex;
+    gap: 8px;
+  }
+
+  .breakdown-pill {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #111723;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+  }
+
+  .breakdown-pill span {
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .bottom-actions-right {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn-dry-run {
+    background: #151d2c;
+    border: 1px solid var(--border-subtle);
+    color: #e2e8f0;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-dry-run:hover {
+    background: #1a2538;
+    border-color: #334155;
+  }
+
+  .btn-clean-primary {
+    background: var(--cyan);
+    color: #041017;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 0 14px var(--cyan-glow);
+    transition: all 0.15s;
+  }
+
+  .btn-clean-primary:hover {
+    background: #22d3ee;
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.45);
+  }
+
+  /* Overlay Modal Simulator */
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(4, 7, 12, 0.75);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+
+  .modal-overlay.active {
+    display: flex;
+  }
+
+  .modal-card {
+    width: 520px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+  }
+
+  .modal-card-header {
+    padding: 14px 18px;
+    background: #090e17;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .modal-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .modal-card-body {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    font-size: 13px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .form-input {
+    background: #080c13;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #fff;
+    font-size: 12.5px;
+    outline: none;
+    font-family: var(--font-sans);
+  }
+
+  .form-input:focus {
+    border-color: var(--cyan);
+  }
+
+  .modal-card-footer {
+    padding: 12px 18px;
+    background: #090e17;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  /* Inline SVG icons */
+  .icon {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
+    stroke: currentColor;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+</style>
+</head>
+<body>
+
+<!-- Presentation Controller -->
+<div class="preview-control-bar">
+  <div class="meta-brand">
+    <span class="brand-badge">PHASE 3 GUI MOCKUP</span>
+    <div>
+      <div class="brand-title">Sweep Desktop Client (Wails + Svelte + Tailwind)</div>
+      <div class="brand-desc">Pratinjau konsep visual antarmuka GUI Native Linux sebelum implementasi kode</div>
+    </div>
+  </div>
+
+  <div class="view-switchers">
+    <button class="view-btn active" onclick="switchView('dashboard')">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>1. Main Dashboard</span>
+    </button>
+    <button class="view-btn" onclick="switchView('custom-modal')">
+      <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>2. Add Custom Path Form</span>
+    </button>
+    <button class="view-btn" onclick="switchView('executing-view')">
+      <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <span>3. Live Clean & Logs</span>
+    </button>
+  </div>
+</div>
+
+<!-- Desktop Window Frame -->
+<div class="desktop-app-window">
+  <!-- Window Header / Titlebar -->
+  <div class="window-titlebar">
+    <div class="titlebar-left">
+      <div class="app-icon-wrap">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <span class="titlebar-app-name">SWEEP</span>
+      <span class="titlebar-version">v1.0.0-phase3</span>
+      <span class="distro-pill">CachyOS (Arch)</span>
+    </div>
+
+    <div class="titlebar-center">
+      <span class="safeguard-pill">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Btrfs Safeguard: Active</span>
+      </span>
+    </div>
+
+    <div class="titlebar-controls">
+      <div class="win-btn win-min"></div>
+      <div class="win-btn win-max"></div>
+      <div class="win-btn win-close"></div>
+    </div>
+  </div>
+
+  <!-- Dual Storage Telemetry Banner -->
+  <div class="storage-telemetry-banner">
+    <!-- Root Storage Meter -->
+    <div class="disk-stat-card">
+      <div class="disk-header-row">
+        <span class="disk-name">
+          <svg class="icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          <span>Root Partition (/)</span>
+        </span>
+        <span class="disk-values">29.56 GB Sisa / 100.00 GB (70.4% Terpakai)</span>
+      </div>
+      <div class="disk-meter-track">
+        <div class="disk-meter-fill fill-root" style="width: 70.4%;"></div>
+      </div>
+    </div>
+
+    <!-- Home Storage Meter -->
+    <div class="disk-stat-card">
+      <div class="disk-header-row">
+        <span class="disk-name">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Home Partition (/home)</span>
+        </span>
+        <span class="disk-values">202.39 GB Sisa / 451.42 GB (55.2% Terpakai)</span>
+      </div>
+      <div class="disk-meter-track">
+        <div class="disk-meter-fill fill-home" style="width: 55.2%;"></div>
+      </div>
+    </div>
+
+    <!-- Storage Partition Filter -->
+    <div class="storage-target-filter">
+      <span class="filter-label">Target Storage Filter</span>
+      <div class="segmented-filter">
+        <button class="seg-btn active">ALL</button>
+        <button class="seg-btn">ROOT (/)</button>
+        <button class="seg-btn">HOME (~)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Split Workspace -->
+  <div class="app-workspace">
+    <!-- Left Sidebar: Subsystems Navigator -->
+    <div class="sidebar-pane">
+      <div class="sidebar-section-title">Developer Caches</div>
+      <div class="module-list-item active">
+        <div class="module-item-left">
+          <div class="custom-checkbox checked"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <span class="module-name">Developer Build Caches</span>
+        </div>
+        <span class="module-badge-size has-reclaim">12.26 GB</span>
+      </div>
+
+      <div class="sidebar-section-title">Package Managers</div>
+      <div class="module-list-item">
+        <div class="module-item-left">
+          <div class="custom-checkbox checked"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <span class="module-name">Pacman & AUR</span>
+        </div>
+        <span class="module-badge-size has-reclaim">11.37 MB</span>
+      </div>
+      <div class="module-list-item">
+        <div class="module-item-left">
+          <div class="custom-checkbox checked"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <span class="module-name">Flatpak Packages</span>
+        </div>
+        <span class="module-badge-size has-reclaim">72.62 MB</span>
+      </div>
+
+      <div class="sidebar-section-title">Containers & System</div>
+      <div class="module-list-item">
+        <div class="module-item-left">
+          <div class="custom-checkbox"></div>
+          <span class="module-name">Docker Engine</span>
+        </div>
+        <span class="module-badge-size has-reclaim">210.00 MB</span>
+      </div>
+      <div class="module-list-item">
+        <div class="module-item-left">
+          <div class="custom-checkbox checked"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <span class="module-name">Desktop & Browser Caches</span>
+        </div>
+        <span class="module-badge-size has-reclaim">1.55 GB</span>
+      </div>
+      <div class="module-list-item">
+        <div class="module-item-left">
+          <div class="custom-checkbox"></div>
+          <span class="module-name">Btrfs & Snapper</span>
+        </div>
+        <span class="module-badge-size">0 B</span>
+      </div>
+
+      <div class="sidebar-section-title">Custom Configuration</div>
+      <div class="module-list-item">
+        <div class="module-item-left">
+          <div class="custom-checkbox"></div>
+          <span class="module-name">Custom Paths & Rules</span>
+        </div>
+        <span class="module-badge-size">0 B</span>
+      </div>
+    </div>
+
+    <!-- Right Main Inspector Pane -->
+    <div class="main-content-pane">
+      <div class="content-toolbar">
+        <div class="module-heading-wrap">
+          <span class="current-module-title">Developer Build Caches</span>
+          <span class="current-module-count">4 targets detected (12.26 GB)</span>
+        </div>
+
+        <div class="toolbar-actions">
+          <div class="search-input-box">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" placeholder="Filter items...">
+          </div>
+          <button class="btn-secondary" onclick="switchView('custom-modal')">
+            <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Add Custom Path</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Cleanable Items Table -->
+      <div class="table-scroll-container">
+        <table class="clean-items-table">
+          <thead>
+            <tr>
+              <th style="width: 38px;"></th>
+              <th>Cleanable Target</th>
+              <th>Location</th>
+              <th>Size</th>
+              <th>Safety Level</th>
+              <th>Target Path</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="selected">
+              <td>
+                <div class="custom-checkbox checked"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+              </td>
+              <td>
+                <div class="item-name-cell">
+                  <span>npm Global Cache</span>
+                  <span class="item-path-sub">15,158 cached packages</span>
+                </div>
+              </td>
+              <td><span class="tag-badge tag-storage-home">[~] HOME</span></td>
+              <td style="font-family: var(--font-mono); font-weight: 700; color: #fff;">7.00 GB</td>
+              <td><span class="tag-badge tag-safe">SAFE</span></td>
+              <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">/home/efzyn/.npm/_cacache</td>
+            </tr>
+
+            <tr class="selected">
+              <td>
+                <div class="custom-checkbox checked"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+              </td>
+              <td>
+                <div class="item-name-cell">
+                  <span>pnpm Virtual Store</span>
+                  <span class="item-path-sub">138,847 hardlinked package files</span>
+                </div>
+              </td>
+              <td><span class="tag-badge tag-storage-home">[~] HOME</span></td>
+              <td style="font-family: var(--font-mono); font-weight: 700; color: #fff;">3.68 GB</td>
+              <td><span class="tag-badge tag-safe">SAFE</span></td>
+              <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">/home/efzyn/.local/share/pnpm/store</td>
+            </tr>
+
+            <tr class="selected">
+              <td>
+                <div class="custom-checkbox checked"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+              </td>
+              <td>
+                <div class="item-name-cell">
+                  <span>Go Build Cache</span>
+                  <span class="item-path-sub">11,240 compilation test & link artifacts</span>
+                </div>
+              </td>
+              <td><span class="tag-badge tag-storage-home">[~] HOME</span></td>
+              <td style="font-family: var(--font-mono); font-weight: 700; color: #fff;">1.47 GB</td>
+              <td><span class="tag-badge tag-safe">SAFE</span></td>
+              <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">/home/efzyn/.cache/go-build</td>
+            </tr>
+
+            <tr>
+              <td>
+                <div class="custom-checkbox"></div>
+              </td>
+              <td>
+                <div class="item-name-cell">
+                  <span>Go Module Download Cache</span>
+                  <span class="item-path-sub">Downloaded source tarballs & modules</span>
+                </div>
+              </td>
+              <td><span class="tag-badge tag-storage-home">[~] HOME</span></td>
+              <td style="font-family: var(--font-mono); font-weight: 700; color: #94a3b8;">103.36 MB</td>
+              <td><span class="tag-badge tag-caution">CAUTION</span></td>
+              <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">/home/efzyn/go/pkg/mod/cache</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- App Bottom Bar -->
+      <div class="app-bottom-bar">
+        <div class="selection-summary-left">
+          <div class="selected-stat-main">
+            Selected Space: <strong>13.84 GB</strong> (28 items)
+          </div>
+          <div class="selected-breakdown-pills">
+            <div class="breakdown-pill">Home (~): <span>13.73 GB</span></div>
+            <div class="breakdown-pill">Root (/): <span>112.37 MB</span></div>
+          </div>
+        </div>
+
+        <div class="bottom-actions-right">
+          <button class="btn-dry-run">Simulate Dry-Run</button>
+          <button class="btn-clean-primary" onclick="switchView('executing-view')">Clean Selected Space</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL OVERLAY: CUSTOM PATH FORM                -->
+  <!-- ============================================== -->
+  <div id="modal-custom" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-card-header">
+        <div class="modal-title">
+          <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>Add Custom Scan Path</span>
+        </div>
+        <button class="btn-secondary" style="padding: 2px 6px;" onclick="switchView('dashboard')">✕</button>
+      </div>
+
+      <div class="modal-card-body">
+        <div class="form-group">
+          <label class="form-label">Rule Name</label>
+          <input class="form-input" type="text" value="Temporary Build Artifacts">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Directory Path</label>
+          <input class="form-input" style="font-family: var(--font-mono);" type="text" value="~/tmp/builds">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">File Pattern (Glob)</label>
+            <input class="form-input" style="font-family: var(--font-mono);" type="text" value="*.tmp">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Safety Level</label>
+            <select class="form-input">
+              <option>SAFE (Recommended)</option>
+              <option>CAUTION</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+          <div class="custom-checkbox checked"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <span style="font-size: 12px; color: #cbd5e1;">Scan subdirectories recursively</span>
+        </div>
+      </div>
+
+      <div class="modal-card-footer">
+        <button class="btn-secondary" onclick="switchView('dashboard')">Cancel</button>
+        <button class="btn-clean-primary" onclick="switchView('dashboard')">Save & Scan Now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL OVERLAY: LIVE CLEAN EXECUTION & LOGS     -->
+  <!-- ============================================== -->
+  <div id="modal-executing" class="modal-overlay">
+    <div class="modal-card" style="width: 620px;">
+      <div class="modal-card-header">
+        <div class="modal-title">
+          <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>Executing System Cleanup</span>
+        </div>
+        <span class="brand-badge" style="background:var(--green-dim); color:var(--green);">COMPLETED</span>
+      </div>
+
+      <div class="modal-card-body">
+        <div style="display: flex; justify-content: space-between; font-size: 13px;">
+          <span>Progress: <strong>28 / 28 items cleaned</strong></span>
+          <span style="color: var(--cyan); font-weight: 700; font-family: var(--font-mono);">13.84 GB Freed</span>
+        </div>
+
+        <div class="disk-meter-track" style="height: 10px;">
+          <div class="disk-meter-fill" style="width: 100%; background: var(--cyan);"></div>
+        </div>
+
+        <!-- Terminal-like Live Log Viewer -->
+        <div style="background: #06090e; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 12px; font-family: var(--font-mono); font-size: 11px; height: 160px; overflow-y: auto; color: #94a3b8; line-height: 1.6;">
+          <div style="color: #64748b;">[INIT] Starting Cleanup Operation across 3 modules</div>
+          <div style="color: var(--green);">[SNAP] Creating Snapper pre-clean safeguard snapshot... [OK]</div>
+          <div style="color: var(--cyan);">[CLEAN] Unlinking ~/.npm/_cacache (15,158 files)... [OK]</div>
+          <div style="color: var(--cyan);">[CLEAN] Pruning pnpm store hardlinks (~/.local/share/pnpm/store)... [OK]</div>
+          <div style="color: var(--cyan);">[CLEAN] Running go clean -cache (~/.cache/go-build)... [OK]</div>
+          <div style="color: var(--green); font-weight: 700;">[DONE] Cleanup finished successfully in 842ms (13.84 GB reclaimed)</div>
+        </div>
+      </div>
+
+      <div class="modal-card-footer">
+        <button class="btn-clean-primary" onclick="switchView('dashboard')">Back to Dashboard</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchView(view) {
+    const customModal = document.getElementById('modal-custom');
+    const execModal = document.getElementById('modal-executing');
+    const buttons = document.querySelectorAll('.view-btn');
+
+    buttons.forEach(btn => btn.classList.remove('active'));
+
+    customModal.classList.remove('active');
+    execModal.classList.remove('active');
+
+    if (view === 'dashboard') {
+      buttons[0].classList.add('active');
+    } else if (view === 'custom-modal') {
+      buttons[1].classList.add('active');
+      customModal.classList.add('active');
+    } else if (view === 'executing-view') {
+      buttons[2].classList.add('active');
+      execModal.classList.add('active');
+    }
+  }
+
+  // Handle URL query ?v=custom or ?v=exec
+  const params = new URLSearchParams(window.location.search);
+  const v = params.get('v');
+  if (v === 'custom') switchView('custom-modal');
+  if (v === 'exec') switchView('executing-view');
+</script>
+
+</body>
+</html>

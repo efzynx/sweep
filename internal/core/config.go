@@ -644,6 +644,41 @@ func LoadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
+// IsDangerousPath checks whether the specified path targets the root filesystem,
+// critical system hierarchy roots (/etc, /boot, /bin, /sys, /proc, etc.), or the user's home root.
+func IsDangerousPath(p string) bool {
+	expanded := ExpandPath(strings.TrimSpace(p))
+	if expanded == "" {
+		return true
+	}
+	clean := filepath.Clean(expanded)
+	dangerousRoots := map[string]bool{
+		"/":      true,
+		"/bin":   true,
+		"/sbin":  true,
+		"/boot":  true,
+		"/dev":   true,
+		"/etc":   true,
+		"/lib":   true,
+		"/lib64": true,
+		"/proc":  true,
+		"/sys":   true,
+		"/usr":   true,
+		"/root":  true,
+		".":      true,
+		"..":     true,
+	}
+	if dangerousRoots[clean] {
+		return true
+	}
+	if home, err := GetUserHomeDir(); err == nil && home != "" {
+		if clean == filepath.Clean(home) {
+			return true
+		}
+	}
+	return false
+}
+
 // AddCustomRule appends or updates a custom scan rule in the configuration,
 // validates its target path, and atomically persists the updated configuration to DefaultConfigPath().
 func (c *Config) AddCustomRule(rule CustomScanRule) error {
@@ -654,6 +689,32 @@ func (c *Config) AddCustomRule(rule CustomScanRule) error {
 	trimmedPath := strings.TrimSpace(rule.Path)
 	if trimmedPath == "" {
 		return errors.New("custom rule path cannot be empty")
+	}
+
+	// Reject null bytes or invalid control characters
+	if strings.ContainsRune(trimmedPath, 0) {
+		return errors.New("custom rule path contains invalid null characters")
+	}
+
+	// Validate against path traversal components
+	for _, part := range strings.Split(filepath.ToSlash(trimmedPath), "/") {
+		if part == ".." {
+			return errors.New("custom rule path cannot contain directory traversal ('..')")
+		}
+	}
+
+	// Expand leading tilde and environment variables to check clean target
+	expanded := ExpandPath(trimmedPath)
+	cleanPath := filepath.Clean(expanded)
+
+	// Custom rule path must be an absolute path or begin with '~'
+	if !filepath.IsAbs(cleanPath) && !strings.HasPrefix(trimmedPath, "~") {
+		return errors.New("custom rule path must be an absolute path or begin with '~'")
+	}
+
+	// Reject dangerous system paths and user home root
+	if IsDangerousPath(cleanPath) {
+		return fmt.Errorf("refusing to add dangerous or system root path %q as custom rule target", cleanPath)
 	}
 
 	// Validate path pattern syntax if glob wildcards are present

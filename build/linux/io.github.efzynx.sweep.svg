@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#161f30"/>
+      <stop offset="50%" stop-color="#0e1522"/>
+      <stop offset="100%" stop-color="#080c14"/>
+    </linearGradient>
+
+    <!-- Squircle Border Gradient -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.6"/>
+      <stop offset="40%" stop-color="#1e293b" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.2"/>
+    </linearGradient>
+
+    <!-- Platter Metallic Gradient -->
+    <linearGradient id="platterGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+
+    <!-- Disk Rim Highlight -->
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.2"/>
+      <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.2"/>
+    </linearGradient>
+
+    <!-- Sweep Glow / Gradient -->
+    <linearGradient id="sweepGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="50%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#67e8f9"/>
+    </linearGradient>
+
+    <!-- Broom Handle Gradient -->
+    <linearGradient id="handleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="30%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+
+    <!-- Bristles / Brush Head Gradient -->
+    <linearGradient id="brushGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+
+    <!-- Soft Ambient Glow -->
+    <radialGradient id="ambientGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.25"/>
+      <stop offset="70%" stop-color="#06b6d4" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Ambient Glow Behind Elements -->
+  <circle cx="256" cy="270" r="190" fill="url(#ambientGlow)"/>
+
+  <!-- Squircle Canvas Base -->
+  <rect x="32" y="32" width="448" height="448" rx="96" ry="96" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="4"/>
+
+  <!-- Subtle Inner Inset Border -->
+  <rect x="36" y="36" width="440" height="440" rx="92" ry="92" fill="none" stroke="#ffffff" stroke-opacity="0.04" stroke-width="2"/>
+
+  <!-- ================= DISK PLATTER SYSTEM MOTIF ================= -->
+  <!-- Bottom Platter Base & Shadow -->
+  <g id="disk-assembly">
+    <!-- Base Platter 2 (Lower Tier) -->
+    <ellipse cx="236" cy="354" rx="150" ry="58" fill="#0b111a" stroke="#1e293b" stroke-width="2"/>
+    <path d="M 86 354 C 86 386 153 412 236 412 C 319 412 386 386 386 354 L 386 374 C 386 406 319 432 236 432 C 153 432 86 406 86 374 Z" fill="#090d15" stroke="#1e293b" stroke-width="2"/>
+    
+    <!-- Base Platter 1 (Middle Tier) -->
+    <path d="M 86 304 C 86 336 153 362 236 362 C 319 362 386 336 386 304 L 386 324 C 386 356 319 382 236 382 C 153 382 86 356 86 324 Z" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
+
+    <!-- Main Disk Platter (Top Layer) -->
+    <ellipse cx="236" cy="304" rx="150" ry="58" fill="url(#platterGrad)" stroke="url(#rimGrad)" stroke-width="3"/>
+    
+    <!-- Inner Groove 1 -->
+    <ellipse cx="236" cy="304" rx="116" ry="45" fill="none" stroke="#334155" stroke-width="1.5" stroke-dasharray="16 6"/>
+
+    <!-- Inner Groove 2 -->
+    <ellipse cx="236" cy="304" rx="80" ry="31" fill="none" stroke="#0ea5e9" stroke-width="1" stroke-opacity="0.4"/>
+
+    <!-- Center Spindle Hub -->
+    <ellipse cx="236" cy="304" rx="42" ry="16" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+    <ellipse cx="236" cy="304" rx="20" ry="8" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+  </g>
+
+  <!-- ================= DYNAMIC SWEEP MOTION TRAILS ================= -->
+  <!-- Swept Clean Stream (Arcing light waves across the platter) -->
+  <g id="sweep-waves">
+    <!-- Wide Cyan Glow Path -->
+    <path d="M 110 326 C 145 270 205 240 285 242 C 345 244 395 272 418 296" fill="none" stroke="#06b6d4" stroke-width="12" stroke-linecap="round" stroke-opacity="0.3"/>
+    
+    <!-- Core Bright Sweep Trail -->
+    <path d="M 114 322 C 148 274 206 248 278 248 C 336 248 386 272 412 292" fill="none" stroke="url(#sweepGrad)" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- Sparkle / Clean Dust Particles -->
+    <circle cx="140" cy="276" r="3.5" fill="#a5f3fc"/>
+    <circle cx="178" cy="254" r="2.5" fill="#67e8f9"/>
+    <circle cx="218" cy="242" r="4.5" fill="#e0f2fe"/>
+    <circle cx="340" cy="252" r="3" fill="#a5f3fc"/>
+    <circle cx="380" cy="270" r="2" fill="#67e8f9"/>
+
+    <!-- Clean Starburst Accents -->
+    <path d="M 160 230 L 163 238 L 171 241 L 163 244 L 160 252 L 157 244 L 149 241 L 157 238 Z" fill="#ffffff" opacity="0.9"/>
+    <path d="M 370 234 L 372 239 L 377 241 L 372 243 L 370 248 L 368 243 L 363 241 L 368 239 Z" fill="#38bdf8" opacity="0.85"/>
+  </g>
+
+  <!-- ================= BROOM / SWEEPER STYLIZED MOTIF ================= -->
+  <!-- Diagonal Angled Broom Sweeping from Top-Right down across the Center -->
+  <g id="broom" transform="rotate(-18 290 220)">
+    <!-- Broom Handle Shaft -->
+    <rect x="284" y="58" width="12" height="180" rx="6" fill="url(#handleGrad)"/>
+    
+    <!-- Handle Top Cap Accent -->
+    <path d="M 282 64 C 282 58 298 58 298 64 L 298 72 L 282 72 Z" fill="#38bdf8"/>
+    
+    <!-- Collar / Ferrule Connector -->
+    <rect x="278" y="218" width="24" height="20" rx="4" fill="#334155" stroke="#475569" stroke-width="1.5"/>
+    <line x1="280" y1="228" x2="300" y2="228" stroke="#38bdf8" stroke-width="1.5"/>
+
+    <!-- Brush Head / Bristles Fan -->
+    <path d="M 276 238 L 304 238 L 324 286 C 324 290 320 294 314 294 L 266 294 C 260 294 256 290 256 286 Z" fill="url(#brushGrad)"/>
+
+    <!-- Bristle Texture Detail Lines -->
+    <line x1="272" y1="244" x2="265" y2="290" stroke="#a5f3fc" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+    <line x1="282" y1="242" x2="280" y2="292" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+    <line x1="290" y1="240" x2="290" y2="293" stroke="#e0f2fe" stroke-width="1.5" stroke-linecap="round" opacity="0.85"/>
+    <line x1="298" y1="242" x2="300" y2="292" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+    <line x1="308" y1="244" x2="315" y2="290" stroke="#a5f3fc" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+  </g>
+</svg>
