@@ -55,7 +55,10 @@ type Module struct {
 func New() *Module {
 	return &Module{
 		commandRunner: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, name, args...).Output()
+			if core.IsPrivileged() {
+				return exec.CommandContext(ctx, name, args...).Output()
+			}
+			return core.RunElevated(ctx, name, args...)
 		},
 		isSystemdRunning: defaultIsSystemdRunning,
 		retentionDays:    DefaultRetentionDays,

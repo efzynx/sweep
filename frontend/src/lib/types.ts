@@ -58,7 +58,25 @@ export interface CleanResult {
   cleaned_items: CleanableItem[];
   freed_bytes: number;
   errors?: string[];
-  duration: number; // nanoseconds
+  duration_ms?: number;
+  success?: boolean;
+}
+
+export interface AppConfig {
+  version?: string;
+  general: {
+    dry_run_default: boolean;
+    snapshot_safeguard: boolean;
+    log_level: string;
+  };
+  retention: {
+    snapper_min_age_days: number;
+    pacman_keep_versions: number;
+    journal_vacuum_days: number;
+    dev_cache_idle_days: number;
+  };
+  modules?: Record<string, { enabled: boolean }>;
+  custom_rules?: CustomScanRule[];
 }
 
 export interface CustomScanRule {

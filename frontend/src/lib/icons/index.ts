@@ -10,3 +10,4 @@ export { default as IconRefresh } from './IconRefresh.svelte';
 export { default as IconTerminal } from './IconTerminal.svelte';
 export { default as IconFolder } from './IconFolder.svelte';
 export { default as IconSweep } from './IconSweep.svelte';
+export { default as IconSettings } from './IconSettings.svelte';

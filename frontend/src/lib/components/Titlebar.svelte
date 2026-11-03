@@ -1,17 +1,19 @@
 <script lang="ts">
   import type { DistroInfo } from '../types';
-  import { IconSweep, IconShield, IconRefresh } from '../icons';
+  import { IconSweep, IconShield, IconRefresh, IconSettings } from '../icons';
 
   let {
     distro,
     safeguardActive = true,
     scanning = false,
     onRefresh = () => {},
+    onOpenSettings = () => {},
   }: {
     distro?: DistroInfo | null;
     safeguardActive?: boolean;
     scanning?: boolean;
     onRefresh?: () => void;
+    onOpenSettings?: () => void;
   } = $props();
 </script>
 
@@ -57,6 +59,14 @@
       class="p-1.5 text-nordic-text-secondary hover:text-white hover:bg-white/5 rounded transition disabled:opacity-50"
     >
       <IconRefresh size={13} class={scanning ? 'animate-spin text-nordic-cyan' : ''} />
+    </button>
+    <button
+      type="button"
+      onclick={onOpenSettings}
+      title="Settings & Retention Policies"
+      class="p-1.5 text-nordic-text-secondary hover:text-white hover:bg-white/5 rounded transition"
+    >
+      <IconSettings size={14} />
     </button>
     <div class="flex items-center gap-2 pl-2 border-l border-nordic-border/60">
       <div class="w-3 h-3 rounded-full bg-[#f59e0b] border border-[#d97706]/80"></div>
