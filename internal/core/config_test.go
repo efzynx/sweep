@@ -532,6 +532,176 @@ func TestGetUserHomeDir_SudoUserSimulation(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_DoesNotClobberExistingConfigUnderSudo(t *testing.T) {
+	origGetuid := getuid
+	origLookup := lookupUser
+	defer func() {
+		getuid = origGetuid
+		lookupUser = origLookup
+	}()
+
+	tempDir := t.TempDir()
+	userHome := filepath.Join(tempDir, "user_alice")
+	userConfigDir := filepath.Join(userHome, ".config", "sweep")
+	if err := os.MkdirAll(userConfigDir, 0755); err != nil {
+		t.Fatalf("failed to create user config dir: %v", err)
+	}
+	userConfigFile := filepath.Join(userConfigDir, "config.yaml")
+
+	// Pre-create custom user configuration with custom properties
+	customYAML := `# Custom User Sweep Configuration
+version: "1.0"
+general:
+  dry_run_default: false
+  snapshot_safeguard: false
+  log_level: "debug"
+custom_rules:
+  - id: "custom_rule_alice"
+    name: "Alice Build Dirs"
+    path: "~/projects/build"
+    pattern: "*.o"
+    recursive: true
+    safety: "SAFE"
+`
+	if err := os.WriteFile(userConfigFile, []byte(customYAML), 0644); err != nil {
+		t.Fatalf("failed to write initial user config: %v", err)
+	}
+
+	initialStat, err := os.Stat(userConfigFile)
+	if err != nil {
+		t.Fatalf("failed to stat user config: %v", err)
+	}
+
+	// Simulate running under sudo: root uid 0, SUDO_USER="alice"
+	getuid = func() int { return 0 }
+	t.Setenv("SUDO_USER", "alice")
+	lookupUser = func(username string) (*user.User, error) {
+		if username == "alice" {
+			return &user.User{
+				Username: "alice",
+				Uid:      "1001",
+				Gid:      "1001",
+				HomeDir:  userHome,
+			}, nil
+		}
+		return nil, user.UnknownUserError(username)
+	}
+
+	// Verify DefaultConfigPath() points to user's config
+	cfgPath, err := DefaultConfigPath()
+	if err != nil {
+		t.Fatalf("DefaultConfigPath failed: %v", err)
+	}
+	if cfgPath != userConfigFile {
+		t.Fatalf("expected DefaultConfigPath to be %q, got %q", userConfigFile, cfgPath)
+	}
+
+	// LoadConfig should read user config and NOT clobber it
+	loadedCfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if loadedCfg.General.DryRunDefault != false {
+		t.Errorf("expected DryRunDefault == false from custom config, got true")
+	}
+	if loadedCfg.General.LogLevel != "debug" {
+		t.Errorf("expected LogLevel == 'debug', got %q", loadedCfg.General.LogLevel)
+	}
+	if len(loadedCfg.CustomRules) != 1 || loadedCfg.CustomRules[0].ID != "custom_rule_alice" {
+		t.Errorf("expected custom rule 'custom_rule_alice' loaded, got %+v", loadedCfg.CustomRules)
+	}
+
+	// Ensure file on disk was NOT clobbered or modified
+	postStat, err := os.Stat(userConfigFile)
+	if err != nil {
+		t.Fatalf("failed to stat user config post-load: %v", err)
+	}
+	if postStat.Size() != initialStat.Size() {
+		t.Errorf("expected config file size to be unchanged, initial: %d, post: %d", initialStat.Size(), postStat.Size())
+	}
+
+	postData, _ := os.ReadFile(userConfigFile)
+	if string(postData) != customYAML {
+		t.Errorf("config file content was clobbered:\n%s", string(postData))
+	}
+}
+
+func TestSaveConfig_SudoUserOwnershipAndPermissions(t *testing.T) {
+	origGetuid := getuid
+	origLookup := lookupUser
+	origChown := chownFile
+	defer func() {
+		getuid = origGetuid
+		lookupUser = origLookup
+		chownFile = origChown
+	}()
+
+	tempDir := t.TempDir()
+	configDir := filepath.Join(tempDir, "config_test", "sweep")
+	configPath := filepath.Join(configDir, "config.yaml")
+
+	var chownedPaths []string
+	var chownedUIDs, chownedGIDs []int
+	chownFile = func(name string, uid, gid int) error {
+		chownedPaths = append(chownedPaths, name)
+		chownedUIDs = append(chownedUIDs, uid)
+		chownedGIDs = append(chownedGIDs, gid)
+		return nil
+	}
+
+	// Simulate root running with SUDO_USER="alice"
+	getuid = func() int { return 0 }
+	t.Setenv("SUDO_USER", "alice")
+	lookupUser = func(username string) (*user.User, error) {
+		if username == "alice" {
+			return &user.User{
+				Username: "alice",
+				Uid:      "1005",
+				Gid:      "1005",
+				HomeDir:  tempDir,
+			}, nil
+		}
+		return nil, user.UnknownUserError(username)
+	}
+
+	cfg := DefaultConfig()
+	if err := SaveConfig(cfg, configPath); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	// Verify file was written with 0644 mode
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("failed to stat configPath: %v", err)
+	}
+	perm := info.Mode().Perm()
+	if perm != 0644 {
+		t.Errorf("expected permissions 0644, got %#o", perm)
+	}
+
+	// Verify chown was invoked for dir and file with UID/GID 1005
+	if len(chownedPaths) < 2 {
+		t.Fatalf("expected at least 2 chown calls (dir and file), got %d: %v", len(chownedPaths), chownedPaths)
+	}
+	foundDir := false
+	foundFile := false
+	for i, p := range chownedPaths {
+		if p == configDir && chownedUIDs[i] == 1005 && chownedGIDs[i] == 1005 {
+			foundDir = true
+		}
+		if p == configPath && chownedUIDs[i] == 1005 && chownedGIDs[i] == 1005 {
+			foundFile = true
+		}
+	}
+	if !foundDir {
+		t.Errorf("expected config directory %q to be chowned to 1005:1005", configDir)
+	}
+	if !foundFile {
+		t.Errorf("expected config file %q to be chowned to 1005:1005", configPath)
+	}
+}
+
 func TestAddAndRemoveCustomRule(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tempDir)

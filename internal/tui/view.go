@@ -25,6 +25,8 @@ func (m Model) View() string {
 		output = m.renderModal()
 	case ViewModeAbout:
 		output = m.renderAboutModal()
+	case ViewModeCustomRuleForm:
+		output = m.renderCustomRuleForm()
 	case ViewModeExecuting:
 		output = m.renderExecuting()
 	case ViewModeDone:

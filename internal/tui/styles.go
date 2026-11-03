@@ -146,6 +146,21 @@ var (
 			Foreground(ColorPrimary).
 			Render("[INFO]")
 
+	// Storage Badges: [/] (Cyan) for Root, [~] (Purple) for Home
+	StyleBadgeRoot = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(ColorPrimary)
+
+	StyleBadgeHome = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(ColorAccent)
+
+	BadgeStorageRoot = StyleBadgeRoot.Render("[/]")
+	BadgeStorageHome = StyleBadgeHome.Render("[~]")
+
+	BadgeRoot = BadgeStorageRoot
+	BadgeHome = BadgeStorageHome
+
 	CategoryBadgeStyle = lipgloss.NewStyle().
 				Foreground(ColorAccent).
 				Bold(true)
@@ -236,6 +251,16 @@ func RenderSafetyBadge(level core.SafetyLevel) string {
 		return BadgeHigh
 	default:
 		return lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf("[%s]", level))
+	}
+}
+
+// RenderStorageBadge returns the styled partition badge for a core.StorageScope.
+func RenderStorageBadge(scope core.StorageScope) string {
+	switch scope {
+	case core.StorageScopeHome:
+		return BadgeStorageHome
+	default:
+		return BadgeStorageRoot
 	}
 }
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -49,8 +50,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if res, ok := msg.results[mod.Module.ID()]; ok {
 				mod.ScanRes = res
 				mod.Error = res.Error
-				// Safe by default: select safe items initially
+				if mod.Cursor >= len(mod.ScanRes.Items) {
+					if len(mod.ScanRes.Items) > 0 {
+						mod.Cursor = len(mod.ScanRes.Items) - 1
+					} else {
+						mod.Cursor = 0
+					}
+				}
+				// Safe by default: select safe items initially, and tag storage scope
 				for i := range mod.ScanRes.Items {
+					core.TagItemStorage(&mod.ScanRes.Items[i], m.storageInfo)
 					if mod.ScanRes.Items[i].Safety == core.SafetySafe {
 						mod.ScanRes.Items[i].Selected = true
 					}
@@ -62,6 +71,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case msgDiskStats:
 		if msg.err == nil {
 			m.diskStats = msg.stats
+			if msg.storageInfo.Root.TotalBytes > 0 {
+				m.storageInfo = msg.storageInfo
+			}
 		}
 		return m, nil
 
@@ -89,6 +101,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+
+	default:
+		if m.viewMode == ViewModeCustomRuleForm {
+			var cmd tea.Cmd
+			switch m.formFocusIndex {
+			case 0:
+				m.inputRuleName, cmd = m.inputRuleName.Update(msg)
+			case 1:
+				m.inputRulePath, cmd = m.inputRulePath.Update(msg)
+			case 2:
+				m.inputRulePattern, cmd = m.inputRulePattern.Update(msg)
+			}
+			return m, cmd
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -106,6 +132,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case ViewModeModal:
 		return m.handleModalKeys(key)
+
+	case ViewModeCustomRuleForm:
+		return m.handleCustomFormKeys(msg)
 
 	case ViewModeExecuting:
 		if key == "ctrl+c" {
@@ -175,8 +204,9 @@ func (m Model) handleMainKeys(key string) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			active := m.ActiveModule()
-			if active != nil && len(active.ScanRes.Items) > 0 {
-				if active.Cursor < len(active.ScanRes.Items)-1 {
+			if active != nil {
+				filtered := m.FilteredItemIndices(active)
+				if len(filtered) > 0 && active.Cursor < len(filtered)-1 {
 					active.Cursor++
 					m.adjustItemScroll(active)
 				}
@@ -192,8 +222,9 @@ func (m Model) handleMainKeys(key string) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			active := m.ActiveModule()
-			if active != nil && len(active.ScanRes.Items) > 0 {
-				if active.Cursor > 0 {
+			if active != nil {
+				filtered := m.FilteredItemIndices(active)
+				if len(filtered) > 0 && active.Cursor > 0 {
 					active.Cursor--
 					m.adjustItemScroll(active)
 				}
@@ -222,9 +253,12 @@ func (m Model) handleMainKeys(key string) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			active := m.ActiveModule()
-			if active != nil && len(active.ScanRes.Items) > 0 {
-				active.Cursor = len(active.ScanRes.Items) - 1
-				m.adjustItemScroll(active)
+			if active != nil {
+				filtered := m.FilteredItemIndices(active)
+				if len(filtered) > 0 {
+					active.Cursor = len(filtered) - 1
+					m.adjustItemScroll(active)
+				}
 			}
 		}
 		return m, nil
@@ -233,18 +267,26 @@ func (m Model) handleMainKeys(key string) (tea.Model, tea.Cmd) {
 		if m.focus == FocusLeft {
 			active := m.ActiveModule()
 			if active != nil {
-				active.ToggleSelectAll()
+				m.ToggleSelectFilteredModule(active)
 			}
 		} else {
 			active := m.ActiveModule()
-			if active != nil && len(active.ScanRes.Items) > 0 && active.Cursor < len(active.ScanRes.Items) {
-				active.ScanRes.Items[active.Cursor].Selected = !active.ScanRes.Items[active.Cursor].Selected
+			if active != nil {
+				filtered := m.FilteredItemIndices(active)
+				if len(filtered) > 0 && active.Cursor >= 0 && active.Cursor < len(filtered) {
+					origIdx := filtered[active.Cursor]
+					active.ScanRes.Items[origIdx].Selected = !active.ScanRes.Items[origIdx].Selected
+				}
 			}
 		}
 		return m, nil
 
 	case "a": // Select / Deselect all globally
 		m.ToggleSelectAllGlobal()
+		return m, nil
+
+	case "p", "P": // Storage target filter cycle (All -> Root -> Home -> All)
+		m.cycleStorageFilter()
 		return m, nil
 
 	case "s": // Rescan all modules
@@ -270,9 +312,195 @@ func (m Model) handleMainKeys(key string) (tea.Model, tea.Cmd) {
 	case "?", "i": // About & System Info modal
 		m.viewMode = ViewModeAbout
 		return m, nil
+
+	case "n", "N":
+		active := m.ActiveModule()
+		if active != nil && (active.Module.ID() == "custom" || active.Module.Category() == "custom") {
+			m.initCustomRuleForm()
+			cmd := m.inputRuleName.Focus()
+			return m, cmd
+		}
+		return m, nil
+
+	case "x", "delete":
+		active := m.ActiveModule()
+		if active != nil && (active.Module.ID() == "custom" || active.Module.Category() == "custom") {
+			if len(active.ScanRes.Items) > 0 {
+				cursor := active.Cursor
+				if cursor < 0 {
+					cursor = 0
+				}
+				if cursor >= len(active.ScanRes.Items) {
+					cursor = len(active.ScanRes.Items) - 1
+				}
+				item := active.ScanRes.Items[cursor]
+				ruleID := ""
+				if item.Metadata != nil {
+					ruleID = item.Metadata["rule_id"]
+				}
+				if ruleID == "" && strings.HasPrefix(item.ID, "custom:") {
+					parts := strings.Split(item.ID, ":")
+					if len(parts) >= 2 {
+						ruleID = parts[1]
+					}
+				}
+				if ruleID != "" && m.cfg != nil {
+					_ = m.cfg.RemoveCustomRule(ruleID)
+					if m.reg != nil {
+						for _, mod := range m.reg.Modules() {
+							if cm, ok := mod.(interface{ SetConfig(*core.Config) }); ok {
+								cm.SetConfig(m.cfg)
+							}
+						}
+					}
+					for _, mi := range m.modules {
+						if cm, ok := mi.Module.(interface{ SetConfig(*core.Config) }); ok {
+							cm.SetConfig(m.cfg)
+						}
+					}
+					m.scanningAll = true
+					for _, mod := range m.modules {
+						mod.Scanning = true
+					}
+					return m, tea.Batch(
+						m.scanAllCmd(),
+						m.refreshDiskStatsCmd(),
+					)
+				}
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
+}
+
+func (m Model) handleCustomFormKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	switch key {
+	case "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+
+	case "esc":
+		m.viewMode = ViewModeMain
+		m.formError = ""
+		return m, nil
+
+	case "tab", "down":
+		m.formFocusIndex = (m.formFocusIndex + 1) % 6
+		m.updateFormFocus()
+		return m, nil
+
+	case "shift+tab", "up":
+		m.formFocusIndex = (m.formFocusIndex - 1 + 6) % 6
+		m.updateFormFocus()
+		return m, nil
+
+	case " ":
+		if m.formFocusIndex == 3 {
+			m.formRecursive = !m.formRecursive
+			return m, nil
+		}
+		if m.formFocusIndex == 4 {
+			switch m.formSafety {
+			case core.SafetySafe:
+				m.formSafety = core.SafetyCaution
+			case core.SafetyCaution:
+				m.formSafety = core.SafetyHigh
+			default:
+				m.formSafety = core.SafetySafe
+			}
+			return m, nil
+		}
+		if m.formFocusIndex == 5 {
+			return m.submitCustomRuleForm()
+		}
+
+	case "enter":
+		return m.submitCustomRuleForm()
+	}
+
+	// Route keys to currently focused text input
+	var cmd tea.Cmd
+	switch m.formFocusIndex {
+	case 0:
+		m.inputRuleName, cmd = m.inputRuleName.Update(msg)
+	case 1:
+		m.inputRulePath, cmd = m.inputRulePath.Update(msg)
+	case 2:
+		m.inputRulePattern, cmd = m.inputRulePattern.Update(msg)
+	}
+	return m, cmd
+}
+
+func (m Model) submitCustomRuleForm() (tea.Model, tea.Cmd) {
+	name := strings.TrimSpace(m.inputRuleName.Value())
+	path := strings.TrimSpace(m.inputRulePath.Value())
+
+	if name == "" {
+		m.formError = "Nama aturan tidak boleh kosong."
+		m.formFocusIndex = 0
+		m.updateFormFocus()
+		return m, nil
+	}
+	if path == "" {
+		m.formError = "Path direktori tidak boleh kosong."
+		m.formFocusIndex = 1
+		m.updateFormFocus()
+		return m, nil
+	}
+
+	pattern := strings.TrimSpace(m.inputRulePattern.Value())
+	if pattern == "" {
+		pattern = "*"
+	}
+
+	safety := m.formSafety
+	if safety == "" {
+		safety = core.SafetySafe
+	}
+
+	rule := core.CustomScanRule{
+		Name:      name,
+		Path:      path,
+		Pattern:   pattern,
+		Recursive: m.formRecursive,
+		Safety:    safety,
+	}
+
+	if m.cfg != nil {
+		if err := m.cfg.AddCustomRule(rule); err != nil {
+			m.formError = fmt.Sprintf("Gagal menyimpan aturan: %v", err)
+			return m, nil
+		}
+	}
+
+	// Update custom module in registry and model items
+	if m.reg != nil {
+		for _, mod := range m.reg.Modules() {
+			if cm, ok := mod.(interface{ SetConfig(*core.Config) }); ok {
+				cm.SetConfig(m.cfg)
+			}
+		}
+	}
+	for _, mi := range m.modules {
+		if cm, ok := mi.Module.(interface{ SetConfig(*core.Config) }); ok {
+			cm.SetConfig(m.cfg)
+		}
+	}
+
+	m.viewMode = ViewModeMain
+	m.formError = ""
+	m.scanningAll = true
+	for _, mod := range m.modules {
+		mod.Scanning = true
+	}
+	return m, tea.Batch(
+		m.scanAllCmd(),
+		m.refreshDiskStatsCmd(),
+	)
 }
 
 func (m Model) handleAboutKeys(key string) (tea.Model, tea.Cmd) {
@@ -349,10 +577,24 @@ func (m *Model) adjustItemScroll(active *ModuleItem) {
 	if visibleRows < 4 {
 		visibleRows = 4
 	}
+	filteredLen := len(m.FilteredItemIndices(active))
+	if active.Cursor >= filteredLen {
+		if filteredLen > 0 {
+			active.Cursor = filteredLen - 1
+		} else {
+			active.Cursor = 0
+		}
+	}
+	if active.Cursor < 0 {
+		active.Cursor = 0
+	}
 	if active.Cursor < active.ScrollOffset {
 		active.ScrollOffset = active.Cursor
 	} else if active.Cursor >= active.ScrollOffset+visibleRows {
 		active.ScrollOffset = active.Cursor - visibleRows + 1
+	}
+	if active.ScrollOffset < 0 {
+		active.ScrollOffset = 0
 	}
 }
 
@@ -366,10 +608,10 @@ func (m Model) startExecution(dryRun bool) (tea.Model, tea.Cmd) {
 	m.logs = make([]string, 0)
 	m.startTime = time.Now()
 
-	// Build queue of modules that have selected items
+	// Build queue of modules that have selected items matching storageFilter
 	m.executionQueue = make([]int, 0)
 	for i, mod := range m.modules {
-		if mod.SelectedCount() > 0 {
+		if m.ModuleFilteredSelectedCount(mod) > 0 {
 			m.executionQueue = append(m.executionQueue, i)
 		}
 	}
@@ -415,7 +657,16 @@ func (m Model) executeStepCmd(stepIdx int) tea.Cmd {
 
 		modIdx := m.executionQueue[stepIdx]
 		modItem := m.modules[modIdx]
-		selected := modItem.ScanRes.SelectedItems()
+
+		var selected []core.CleanableItem
+		for _, it := range modItem.ScanRes.Items {
+			if it.Selected {
+				scope := core.ItemStorageScope(it)
+				if m.storageFilter == core.StorageScopeAll || scope == m.storageFilter {
+					selected = append(selected, it)
+				}
+			}
+		}
 
 		opts := core.CleanOptions{
 			DryRun:            m.executingDryRun,
@@ -454,6 +705,7 @@ func (m Model) scanAllCmd() tea.Cmd {
 func (m Model) refreshDiskStatsCmd() tea.Cmd {
 	return func() tea.Msg {
 		stats, err := GetRootDiskStats()
-		return msgDiskStats{stats: stats, err: err}
+		sInfo, _ := core.DetectSystemStorage()
+		return msgDiskStats{stats: stats, storageInfo: sInfo, err: err}
 	}
 }

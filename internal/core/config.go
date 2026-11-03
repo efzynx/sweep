@@ -592,11 +592,13 @@ func SaveDefaultConfig(path string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory %q: %w", dir, err)
 	}
+	_ = ChownToSudoUser(dir)
 
 	content := GenerateDefaultConfigYAML()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write default config file %q: %w", path, err)
 	}
+	_ = ChownToSudoUser(path)
 
 	return nil
 }
@@ -750,6 +752,7 @@ func SaveConfig(cfg *Config, path string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory %q: %w", dir, err)
 	}
+	_ = ChownToSudoUser(dir)
 
 	cfg.syncFields()
 
@@ -768,6 +771,8 @@ func SaveConfig(cfg *Config, path string) error {
 		_ = os.Remove(tmpName)
 	}()
 
+	_ = tmpFile.Chmod(0644)
+
 	if _, err := tmpFile.Write(data); err != nil {
 		_ = tmpFile.Close()
 		return fmt.Errorf("failed to write config to temp file %q: %w", tmpName, err)
@@ -783,6 +788,8 @@ func SaveConfig(cfg *Config, path string) error {
 	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("failed to atomically replace config file %q: %w", path, err)
 	}
+
+	_ = ChownToSudoUser(path)
 
 	return nil
 }

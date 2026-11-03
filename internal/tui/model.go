@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/efzynx/sweep/internal/core"
 	"github.com/efzynx/sweep/internal/core/distro"
@@ -36,11 +37,8 @@ func CategoryPriority(cat string) int {
 
 // leftPaneVisibleRows computes the available vertical content rows for the left tree pane.
 func (m *Model) leftPaneVisibleRows() int {
-	headerHeight := 2
-	if m.width < 90 {
-		headerHeight = 3
-	}
-	footerHeight := 1
+	headerHeight := lipgloss.Height(m.renderHeader())
+	footerHeight := lipgloss.Height(m.renderFooter())
 	mainHeight := m.height - headerHeight - footerHeight
 	if mainHeight < 4 {
 		mainHeight = 4
@@ -63,6 +61,7 @@ const (
 	ViewModeMain ViewMode = iota
 	ViewModeModal
 	ViewModeAbout
+	ViewModeCustomRuleForm
 	ViewModeExecuting
 	ViewModeDone
 )
@@ -172,9 +171,20 @@ type Model struct {
 	snapperAvailable         bool
 	snapperSafeguardSnapshot bool
 
+	// Custom Rule Form State
+	inputRuleName    textinput.Model
+	inputRulePath    textinput.Model
+	inputRulePattern textinput.Model
+	formRecursive    bool
+	formSafety       core.SafetyLevel
+	formFocusIndex   int // 0: Name, 1: Path, 2: Pattern, 3: Recursive, 4: Safety, 5: Submit
+	formError        string
+
 	// Distro & System Metrics
-	distroInfo *distro.DistroInfo
-	diskStats  DiskStats
+	distroInfo    *distro.DistroInfo
+	diskStats     DiskStats
+	storageInfo   core.SystemStorageInfo
+	storageFilter core.StorageScope
 
 	// Execution & Logging
 	spinner          spinner.Model
@@ -215,6 +225,7 @@ func NewModel(ctx context.Context, reg *core.Registry, cfg *core.Config) Model {
 	dInfo := distro.Current()
 	hasSnapper := distro.HasSnapper()
 	dStats, _ := GetRootDiskStats()
+	sInfo, _ := core.DetectSystemStorage()
 
 	for _, mod := range reg.Modules() {
 		if cm, ok := mod.(interface{ SetConfig(*core.Config) }); ok {
@@ -233,6 +244,22 @@ func NewModel(ctx context.Context, reg *core.Registry, cfg *core.Config) Model {
 		return CategoryPriority(items[i].Module.Category()) < CategoryPriority(items[j].Module.Category())
 	})
 
+	inName := textinput.New()
+	inName.Placeholder = "Temporary Build Artifacts"
+	inName.CharLimit = 80
+	inName.Width = 44
+
+	inPath := textinput.New()
+	inPath.Placeholder = "~/tmp/builds or /var/tmp/build"
+	inPath.CharLimit = 120
+	inPath.Width = 44
+
+	inPat := textinput.New()
+	inPat.Placeholder = "* or *.tmp"
+	inPat.SetValue("*")
+	inPat.CharLimit = 60
+	inPat.Width = 44
+
 	return Model{
 		ctx:                      subCtx,
 		cancel:                   cancel,
@@ -248,12 +275,116 @@ func NewModel(ctx context.Context, reg *core.Registry, cfg *core.Config) Model {
 		modalType:                ModalTypeDryRun,
 		snapperAvailable:         hasSnapper,
 		snapperSafeguardSnapshot: hasSnapper && cfg.General.SnapshotSafeguard,
+		inputRuleName:            inName,
+		inputRulePath:            inPath,
+		inputRulePattern:         inPat,
+		formRecursive:            true,
+		formSafety:               core.SafetySafe,
+		formFocusIndex:           0,
+		formError:                "",
 		distroInfo:               dInfo,
 		diskStats:                dStats,
+		storageInfo:              sInfo,
+		storageFilter:            core.StorageScopeAll,
 		spinner:                  s,
 		progress:                 prog,
 		logs:                     make([]string, 0),
 		cleanErrors:              make([]string, 0),
+	}
+}
+
+// initCustomRuleForm resets and initializes the custom rule modal input fields.
+func (m *Model) initCustomRuleForm() {
+	m.inputRuleName = textinput.New()
+	m.inputRuleName.Placeholder = "Temporary Build Artifacts"
+	m.inputRuleName.Prompt = "> "
+	m.inputRuleName.PromptStyle = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+	m.inputRuleName.TextStyle = lipgloss.NewStyle().Foreground(ColorFgWhite)
+	m.inputRuleName.PlaceholderStyle = lipgloss.NewStyle().Foreground(ColorSubtle)
+	m.inputRuleName.CharLimit = 80
+	m.inputRuleName.Width = 44
+	m.inputRuleName.Focus()
+
+	m.inputRulePath = textinput.New()
+	m.inputRulePath.Placeholder = "~/tmp/builds or /var/tmp/build"
+	m.inputRulePath.Prompt = "  "
+	m.inputRulePath.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+	m.inputRulePath.TextStyle = lipgloss.NewStyle().Foreground(ColorFgWhite)
+	m.inputRulePath.PlaceholderStyle = lipgloss.NewStyle().Foreground(ColorSubtle)
+	m.inputRulePath.CharLimit = 120
+	m.inputRulePath.Width = 44
+
+	m.inputRulePattern = textinput.New()
+	m.inputRulePattern.Placeholder = "* or *.tmp"
+	m.inputRulePattern.SetValue("*")
+	m.inputRulePattern.Prompt = "  "
+	m.inputRulePattern.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+	m.inputRulePattern.TextStyle = lipgloss.NewStyle().Foreground(ColorFgWhite)
+	m.inputRulePattern.PlaceholderStyle = lipgloss.NewStyle().Foreground(ColorSubtle)
+	m.inputRulePattern.CharLimit = 60
+	m.inputRulePattern.Width = 44
+
+	m.formRecursive = true
+	m.formSafety = core.SafetySafe
+	m.formFocusIndex = 0
+	m.formError = ""
+	m.viewMode = ViewModeCustomRuleForm
+}
+
+// updateFormFocus updates the focus state and prompts of text input fields based on formFocusIndex.
+func (m *Model) updateFormFocus() {
+	switch m.formFocusIndex {
+	case 0:
+		m.inputRuleName.Focus()
+		m.inputRuleName.Prompt = "> "
+		m.inputRuleName.PromptStyle = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+
+		m.inputRulePath.Blur()
+		m.inputRulePath.Prompt = "  "
+		m.inputRulePath.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+		m.inputRulePattern.Blur()
+		m.inputRulePattern.Prompt = "  "
+		m.inputRulePattern.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+	case 1:
+		m.inputRuleName.Blur()
+		m.inputRuleName.Prompt = "  "
+		m.inputRuleName.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+		m.inputRulePath.Focus()
+		m.inputRulePath.Prompt = "> "
+		m.inputRulePath.PromptStyle = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+
+		m.inputRulePattern.Blur()
+		m.inputRulePattern.Prompt = "  "
+		m.inputRulePattern.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+	case 2:
+		m.inputRuleName.Blur()
+		m.inputRuleName.Prompt = "  "
+		m.inputRuleName.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+		m.inputRulePath.Blur()
+		m.inputRulePath.Prompt = "  "
+		m.inputRulePath.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+		m.inputRulePattern.Focus()
+		m.inputRulePattern.Prompt = "> "
+		m.inputRulePattern.PromptStyle = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+
+	default:
+		m.inputRuleName.Blur()
+		m.inputRuleName.Prompt = "  "
+		m.inputRuleName.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+		m.inputRulePath.Blur()
+		m.inputRulePath.Prompt = "  "
+		m.inputRulePath.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+		m.inputRulePattern.Blur()
+		m.inputRulePattern.Prompt = "  "
+		m.inputRulePattern.PromptStyle = lipgloss.NewStyle().Foreground(ColorMuted)
 	}
 }
 
@@ -310,12 +441,23 @@ func (m *Model) AllSelected() bool {
 	return m.TotalSelectedCount() == scanned
 }
 
-// ToggleSelectAllGlobal toggles selection state across all modules.
+// ToggleSelectAllGlobal toggles selection state across all modules, respecting active storageFilter.
 func (m *Model) ToggleSelectAllGlobal() {
-	allSel := m.AllSelected()
+	if m.storageFilter == core.StorageScopeAll {
+		allSel := m.AllSelected()
+		newVal := !allSel
+		for _, mod := range m.modules {
+			mod.ScanRes.SetAllSelected(newVal)
+		}
+		return
+	}
+	allSel := m.AllFilteredSelected()
 	newVal := !allSel
 	for _, mod := range m.modules {
-		mod.ScanRes.SetAllSelected(newVal)
+		indices := m.FilteredItemIndices(mod)
+		for _, idx := range indices {
+			mod.ScanRes.Items[idx].Selected = newVal
+		}
 	}
 }
 
@@ -344,6 +486,198 @@ func (m *Model) AppendLog(line string) {
 	m.logs = append(m.logs, fmt.Sprintf("[%s] %s", ts, line))
 }
 
+// StorageFilter returns the active storage filter scope.
+func (m *Model) StorageFilter() core.StorageScope {
+	return m.storageFilter
+}
+
+// SetStorageFilter sets the active storage filter scope.
+func (m *Model) SetStorageFilter(scope core.StorageScope) {
+	m.storageFilter = scope
+}
+
+// StorageInfo returns the system storage metrics.
+func (m *Model) StorageInfo() core.SystemStorageInfo {
+	return m.storageInfo
+}
+
+// SetStorageInfo sets the system storage metrics.
+func (m *Model) SetStorageInfo(info core.SystemStorageInfo) {
+	m.storageInfo = info
+}
+
+// cycleStorageFilter cycles the cleanup target between All, Root, and Home.
+// ScopeAll -> ScopeRoot -> ScopeHome -> ScopeAll
+func (m *Model) cycleStorageFilter() {
+	switch m.storageFilter {
+	case core.StorageScopeAll:
+		m.storageFilter = core.StorageScopeRoot
+	case core.StorageScopeRoot:
+		m.storageFilter = core.StorageScopeHome
+	case core.StorageScopeHome:
+		m.storageFilter = core.StorageScopeAll
+	default:
+		m.storageFilter = core.StorageScopeAll
+	}
+
+	if active := m.ActiveModule(); active != nil {
+		m.adjustItemScroll(active)
+	}
+}
+
+// FilteredItemIndices returns indices of items in mod.ScanRes.Items that match storageFilter.
+func (m *Model) FilteredItemIndices(mod *ModuleItem) []int {
+	if mod == nil {
+		return nil
+	}
+	var indices []int
+	for i := range mod.ScanRes.Items {
+		item := &mod.ScanRes.Items[i]
+		if item.Metadata == nil || item.Metadata["storage"] == "" {
+			core.TagItemStorage(item, m.storageInfo)
+		}
+		scope := core.ItemStorageScope(*item)
+		if m.storageFilter == core.StorageScopeAll || scope == m.storageFilter {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
+// ModuleFilteredBytes computes the total reclaimable bytes of items matching storageFilter in mod.
+func (m *Model) ModuleFilteredBytes(mod *ModuleItem) int64 {
+	if mod == nil {
+		return 0
+	}
+	indices := m.FilteredItemIndices(mod)
+	var total int64
+	for _, idx := range indices {
+		total += mod.ScanRes.Items[idx].Size
+	}
+	return total
+}
+
+// ModuleFilteredCount returns the number of items matching storageFilter in mod.
+func (m *Model) ModuleFilteredCount(mod *ModuleItem) int {
+	return len(m.FilteredItemIndices(mod))
+}
+
+// ModuleFilteredSelectedBytes computes selected bytes matching storageFilter in mod.
+func (m *Model) ModuleFilteredSelectedBytes(mod *ModuleItem) int64 {
+	if mod == nil {
+		return 0
+	}
+	indices := m.FilteredItemIndices(mod)
+	var total int64
+	for _, idx := range indices {
+		if mod.ScanRes.Items[idx].Selected {
+			total += mod.ScanRes.Items[idx].Size
+		}
+	}
+	return total
+}
+
+// ModuleFilteredSelectedCount returns the number of selected items matching storageFilter in mod.
+func (m *Model) ModuleFilteredSelectedCount(mod *ModuleItem) int {
+	if mod == nil {
+		return 0
+	}
+	indices := m.FilteredItemIndices(mod)
+	var count int
+	for _, idx := range indices {
+		if mod.ScanRes.Items[idx].Selected {
+			count++
+		}
+	}
+	return count
+}
+
+// isModuleFilteredAllSelected reports whether all items matching storageFilter in mod are selected.
+func (m *Model) isModuleFilteredAllSelected(mod *ModuleItem) bool {
+	indices := m.FilteredItemIndices(mod)
+	if len(indices) == 0 {
+		return false
+	}
+	for _, idx := range indices {
+		if !mod.ScanRes.Items[idx].Selected {
+			return false
+		}
+	}
+	return true
+}
+
+// isModuleFilteredAnySelected reports whether at least one item matching storageFilter in mod is selected.
+func (m *Model) isModuleFilteredAnySelected(mod *ModuleItem) bool {
+	indices := m.FilteredItemIndices(mod)
+	for _, idx := range indices {
+		if mod.ScanRes.Items[idx].Selected {
+			return true
+		}
+	}
+	return false
+}
+
+// ToggleSelectFilteredModule toggles selection for all items matching storageFilter in mod.
+func (m *Model) ToggleSelectFilteredModule(mod *ModuleItem) {
+	if mod == nil {
+		return
+	}
+	indices := m.FilteredItemIndices(mod)
+	if len(indices) == 0 {
+		return
+	}
+	allSel := true
+	for _, idx := range indices {
+		if !mod.ScanRes.Items[idx].Selected {
+			allSel = false
+			break
+		}
+	}
+	for _, idx := range indices {
+		mod.ScanRes.Items[idx].Selected = !allSel
+	}
+}
+
+// AllFilteredSelected reports whether all filtered cleanable items are selected across all modules.
+func (m *Model) AllFilteredSelected() bool {
+	scanned := 0
+	selected := 0
+	for _, mod := range m.modules {
+		indices := m.FilteredItemIndices(mod)
+		scanned += len(indices)
+		for _, idx := range indices {
+			if mod.ScanRes.Items[idx].Selected {
+				selected++
+			}
+		}
+	}
+	if scanned == 0 {
+		return false
+	}
+	return selected == scanned
+}
+
+// SelectedStorageBytes computes the breakdown of selected bytes for Home and Root filesystems.
+func (m *Model) SelectedStorageBytes() (homeBytes int64, rootBytes int64) {
+	for _, mod := range m.modules {
+		for i := range mod.ScanRes.Items {
+			it := &mod.ScanRes.Items[i]
+			if it.Selected {
+				if it.Metadata == nil || it.Metadata["storage"] == "" {
+					core.TagItemStorage(it, m.storageInfo)
+				}
+				scope := core.ItemStorageScope(*it)
+				if scope == core.StorageScopeHome {
+					homeBytes += it.Size
+				} else {
+					rootBytes += it.Size
+				}
+			}
+		}
+	}
+	return homeBytes, rootBytes
+}
+
 // Messages used by the Bubbletea event loop
 type msgScanResult struct {
 	results map[string]core.ScanResult
@@ -363,6 +697,7 @@ type msgCleanDone struct {
 }
 
 type msgDiskStats struct {
-	stats DiskStats
-	err   error
+	stats       DiskStats
+	storageInfo core.SystemStorageInfo
+	err         error
 }

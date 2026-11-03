@@ -516,6 +516,7 @@ func TestTUI_HeaderAndModalRootNotices(t *testing.T) {
 	reg, _, _ := setupTestRegistry()
 	cfg := core.DefaultConfig()
 	m := NewModel(context.Background(), reg, cfg)
+	m.storageInfo = core.SystemStorageInfo{HasSeparateHome: false}
 	m.width = 110
 	m.height = 30
 	m.diskStats = DiskStats{
@@ -781,6 +782,13 @@ func TestTUI_AllViewModes_HeightInvariant(t *testing.T) {
 			},
 		},
 		{
+			name: "CustomRuleForm",
+			setupMod: func(m Model) Model {
+				m.initCustomRuleForm()
+				return m
+			},
+		},
+		{
 			name: "Executing",
 			setupMod: func(m Model) Model {
 				m.viewMode = ViewModeExecuting
@@ -851,6 +859,7 @@ func TestTUI_HeaderVisibilityAndBanner(t *testing.T) {
 	results, _ := reg.ScanAll(context.Background())
 	newM, _ := m.Update(msgScanResult{results: results})
 	m = newM.(Model)
+	m.storageInfo = core.SystemStorageInfo{HasSeparateHome: false}
 	m.diskStats = DiskStats{
 		TotalBytes:  500 * 1024 * 1024 * 1024,
 		UsedBytes:   250 * 1024 * 1024 * 1024,
@@ -933,6 +942,7 @@ func TestTUI_Concept2_NordicStatuslineAndTreePane(t *testing.T) {
 	results, _ := reg.ScanAll(context.Background())
 	newM, _ := m.Update(msgScanResult{results: results})
 	m = newM.(Model)
+	m.storageInfo = core.SystemStorageInfo{HasSeparateHome: false}
 	m.width = 135
 	m.height = 35
 	m.diskStats = DiskStats{
@@ -1447,6 +1457,7 @@ func TestTUI_Phase2_MultiGigabyteSelectionTotals(t *testing.T) {
 	results, _ := reg.ScanAll(context.Background())
 	newM, _ := m.Update(msgScanResult{results: results})
 	m = newM.(Model)
+	m.storageInfo = core.SystemStorageInfo{HasSeparateHome: false}
 
 	// Total scanned across all 10 modules:
 	// 500M + 800M + 120M + 350M + 1500M + (2500M+3500M+1500M) + (800M+500M) + 1200M + 5500M + 1500M = 20270 MB (~20.27 GB)
@@ -1480,5 +1491,694 @@ func TestTUI_Phase2_MultiGigabyteSelectionTotals(t *testing.T) {
 	}
 	if m.TotalSelectedBytes() != m.TotalScannedBytes() {
 		t.Errorf("expected selected bytes (%d) == scanned bytes (%d)", m.TotalSelectedBytes(), m.TotalScannedBytes())
+	}
+}
+
+func TestTUI_CustomRuleForm_OpenAndCancel(t *testing.T) {
+	reg := core.NewRegistry()
+	customMod := &mockTestModule{
+		id:       "custom",
+		name:     "Custom Paths & Rules",
+		category: "custom",
+		items:    nil,
+	}
+	_ = reg.Register(customMod)
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.activeModuleIdx = 0
+
+	// 1. Pressing 'n' opens ViewModeCustomRuleForm
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = newM.(Model)
+
+	if m.viewMode != ViewModeCustomRuleForm {
+		t.Fatalf("expected viewMode to be ViewModeCustomRuleForm, got %d", m.viewMode)
+	}
+	if !m.inputRuleName.Focused() {
+		t.Errorf("expected inputRuleName to be focused upon opening form")
+	}
+	if m.formFocusIndex != 0 {
+		t.Errorf("expected formFocusIndex to be 0, got %d", m.formFocusIndex)
+	}
+
+	// 2. Pressing 'esc' cancels back to ViewModeMain
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = newM.(Model)
+
+	if m.viewMode != ViewModeMain {
+		t.Fatalf("expected viewMode to be ViewModeMain after Esc, got %d", m.viewMode)
+	}
+}
+
+func TestTUI_CustomRuleForm_CyclingAndToggles(t *testing.T) {
+	reg := core.NewRegistry()
+	customMod := &mockTestModule{
+		id:       "custom",
+		name:     "Custom Paths & Rules",
+		category: "custom",
+	}
+	_ = reg.Register(customMod)
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.initCustomRuleForm()
+
+	// Field indices: 0:Name -> 1:Path -> 2:Pattern -> 3:Recursive -> 4:Safety -> 5:Submit
+	for expectedIdx := 1; expectedIdx <= 5; expectedIdx++ {
+		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m = newM.(Model)
+		if m.formFocusIndex != expectedIdx {
+			t.Fatalf("expected focus index %d after Tab, got %d", expectedIdx, m.formFocusIndex)
+		}
+	}
+
+	// Cycle back to 0
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = newM.(Model)
+	if m.formFocusIndex != 0 {
+		t.Fatalf("expected focus index 0 after wrapping Tab, got %d", m.formFocusIndex)
+	}
+
+	// Reverse with Shift+Tab (from 0 to 5)
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = newM.(Model)
+	if m.formFocusIndex != 5 {
+		t.Fatalf("expected focus index 5 after Shift+Tab, got %d", m.formFocusIndex)
+	}
+
+	// Test recursive toggle at index 3
+	m.formFocusIndex = 3
+	if !m.formRecursive {
+		t.Fatalf("expected default formRecursive to be true")
+	}
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = newM.(Model)
+	if m.formRecursive {
+		t.Errorf("expected formRecursive to toggle to false")
+	}
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = newM.(Model)
+	if !m.formRecursive {
+		t.Errorf("expected formRecursive to toggle back to true")
+	}
+
+	// Test safety level cycle at index 4
+	m.formFocusIndex = 4
+	if m.formSafety != core.SafetySafe {
+		t.Fatalf("expected default formSafety to be SafetySafe, got %s", m.formSafety)
+	}
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = newM.(Model)
+	if m.formSafety != core.SafetyCaution {
+		t.Errorf("expected formSafety to cycle to Caution, got %s", m.formSafety)
+	}
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = newM.(Model)
+	if m.formSafety != core.SafetyHigh {
+		t.Errorf("expected formSafety to cycle to High, got %s", m.formSafety)
+	}
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = newM.(Model)
+	if m.formSafety != core.SafetySafe {
+		t.Errorf("expected formSafety to cycle back to Safe, got %s", m.formSafety)
+	}
+}
+
+func TestTUI_CustomRuleForm_Validation(t *testing.T) {
+	reg := core.NewRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.initCustomRuleForm()
+
+	// 1. Submit with empty name
+	m.inputRuleName.SetValue("")
+	m.inputRulePath.SetValue("/tmp/test")
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+
+	if m.viewMode != ViewModeCustomRuleForm {
+		t.Errorf("expected to stay in ViewModeCustomRuleForm on validation error")
+	}
+	if !strings.Contains(m.formError, "Nama aturan tidak boleh kosong") {
+		t.Errorf("expected empty name error message, got %q", m.formError)
+	}
+
+	// 2. Submit with empty path
+	m.inputRuleName.SetValue("Valid Name")
+	m.inputRulePath.SetValue("")
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+
+	if m.viewMode != ViewModeCustomRuleForm {
+		t.Errorf("expected to stay in ViewModeCustomRuleForm on validation error")
+	}
+	if !strings.Contains(m.formError, "Path direktori tidak boleh kosong") {
+		t.Errorf("expected empty path error message, got %q", m.formError)
+	}
+}
+
+func TestTUI_CustomRuleForm_SubmitAndPersist(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	reg := core.NewRegistry()
+	customMod := &mockTestModule{
+		id:       "custom",
+		name:     "Custom Paths & Rules",
+		category: "custom",
+	}
+	_ = reg.Register(customMod)
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.initCustomRuleForm()
+
+	m.inputRuleName.SetValue("Test Build Artifacts")
+	m.inputRulePath.SetValue(tmpDir)
+	m.inputRulePattern.SetValue("*.log")
+	m.formRecursive = true
+	m.formSafety = core.SafetySafe
+
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+
+	if m.viewMode != ViewModeMain {
+		t.Fatalf("expected viewMode to be ViewModeMain after submit, got %d", m.viewMode)
+	}
+	if !m.scanningAll {
+		t.Errorf("expected immediate rescan (scanningAll=true) after adding rule")
+	}
+	if cmd == nil {
+		t.Errorf("expected rescan batch command to be returned")
+	}
+
+	// Verify rule was added to config
+	found := false
+	for _, r := range m.cfg.CustomRules {
+		if r.Name == "Test Build Artifacts" && r.Path == tmpDir && r.Pattern == "*.log" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected new rule to be in m.cfg.CustomRules: %+v", m.cfg.CustomRules)
+	}
+}
+
+func TestTUI_CustomRule_Delete(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	reg := core.NewRegistry()
+	ruleID := "custom_test_to_delete"
+	customMod := &mockTestModule{
+		id:       "custom",
+		name:     "Custom Paths & Rules",
+		category: "custom",
+		items: []core.CleanableItem{
+			{
+				ID:       "custom:" + ruleID + ":/tmp/item.tmp",
+				Name:     "item.tmp",
+				Path:     "/tmp/item.tmp",
+				Size:     1024,
+				Safety:   core.SafetySafe,
+				Metadata: map[string]string{"rule_id": ruleID},
+			},
+		},
+	}
+	_ = reg.Register(customMod)
+	cfg := core.DefaultConfig()
+	cfg.CustomRules = append(cfg.CustomRules, core.CustomScanRule{
+		ID:   ruleID,
+		Name: "Rule To Delete",
+		Path: "/tmp",
+	})
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.activeModuleIdx = 0
+	// Initialize scan result on module
+	m.modules[0].ScanRes = core.ScanResult{
+		Items:     customMod.items,
+		TotalSize: 1024,
+	}
+	m.modules[0].Cursor = 0
+	m.focus = FocusRight
+
+	// Press 'x' to delete highlighted rule
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = newM.(Model)
+
+	if !m.scanningAll {
+		t.Errorf("expected rescan to be triggered after delete")
+	}
+	if cmd == nil {
+		t.Errorf("expected rescan cmd to be returned")
+	}
+
+	// Verify rule removed from config
+	for _, r := range m.cfg.CustomRules {
+		if r.ID == ruleID {
+			t.Errorf("expected rule %q to be deleted from config", ruleID)
+		}
+	}
+}
+
+func TestTUI_EmptyStates_ContextAware(t *testing.T) {
+	reg := core.NewRegistry()
+	modCustom := &mockTestModule{id: "custom", name: "Custom Paths & Rules", category: "custom"}
+	modSnapper := &mockTestModule{id: "snapper", name: "Snapper Btrfs", category: "filesystem"}
+	modPkg := &mockTestModule{id: "pacman", name: "Pacman Cache", category: "pkg"}
+	_ = reg.Register(modCustom)
+	_ = reg.Register(modSnapper)
+	_ = reg.Register(modPkg)
+	cfg := core.DefaultConfig()
+	cfg.CustomRules = nil // Ensure 0 rules
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.width = 110
+	m.height = 25
+
+	// 1. Custom module empty state
+	for i, mod := range m.modules {
+		if mod.Module.ID() == "custom" {
+			m.activeModuleIdx = i
+			break
+		}
+	}
+	renderedCustom := m.renderRightPane(70, 16)
+	if !strings.Contains(renderedCustom, "Belum ada aturan custom path yang dikonfigurasi.") {
+		t.Errorf("custom empty state missing configured guidance:\n%s", renderedCustom)
+	}
+	if !strings.Contains(renderedCustom, "Tekan [n] untuk menambah aturan path kustom baru") {
+		t.Errorf("custom empty state missing [n] instruction:\n%s", renderedCustom)
+	}
+
+	// 2. Snapper empty state (with permission_denied metadata or unprivileged)
+	for i, mod := range m.modules {
+		if mod.Module.ID() == "snapper" {
+			m.activeModuleIdx = i
+			mod.ScanRes = core.ScanResult{
+				Metadata: map[string]string{
+					"permission_denied": "Snapper requires root privileges",
+				},
+			}
+			break
+		}
+	}
+	renderedSnapper := m.renderRightPane(90, 16)
+	if !strings.Contains(renderedSnapper, "Snapper memerlukan izin root untuk membaca daftar snapshot.") {
+		t.Errorf("snapper empty state missing root guidance:\n%s", renderedSnapper)
+	}
+	if !strings.Contains(renderedSnapper, "Jalankan 'sudo sweep' untuk memindai snapshot") {
+		t.Errorf("snapper empty state missing 'sudo sweep' hint:\n%s", renderedSnapper)
+	}
+	if !strings.Contains(renderedSnapper, "Snapshot aktif (#0)") {
+		t.Errorf("snapper empty state missing snapshot 0 note:\n%s", renderedSnapper)
+	}
+
+	// 3. Other module empty state (Pacman)
+	for i, mod := range m.modules {
+		if mod.Module.ID() == "pacman" {
+			m.activeModuleIdx = i
+			mod.ScanRes = core.ScanResult{Items: nil}
+			break
+		}
+	}
+	renderedPkg := m.renderRightPane(90, 16)
+	if !strings.Contains(renderedPkg, "Sistem Anda bersih!") {
+		t.Errorf("pkg empty state missing clean system guidance:\n%s", renderedPkg)
+	}
+}
+
+func TestTUI_CustomRuleForm_ViewportHeightClamping(t *testing.T) {
+	reg := core.NewRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.initCustomRuleForm()
+
+	heights := []int{16, 20, 24, 30, 40}
+	for _, h := range heights {
+		m.width = 100
+		m.height = h
+		view := m.View()
+		renderedHeight := lipgloss.Height(view)
+		if renderedHeight > h {
+			t.Errorf("custom form viewport height overflow for target %d: got %d rows", h, renderedHeight)
+		}
+	}
+}
+
+func TestTUI_StorageFilterCyclingKey(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	if m.StorageFilter() != core.StorageScopeAll {
+		t.Fatalf("expected initial storage filter to be ScopeAll, got %s", m.StorageFilter())
+	}
+
+	// Press 'p': ScopeAll -> ScopeRoot
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	m = newM.(Model)
+	if m.StorageFilter() != core.StorageScopeRoot {
+		t.Errorf("after 1st 'p', expected ScopeRoot, got %s", m.StorageFilter())
+	}
+
+	// Press 'p': ScopeRoot -> ScopeHome
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	m = newM.(Model)
+	if m.StorageFilter() != core.StorageScopeHome {
+		t.Errorf("after 2nd 'p', expected ScopeHome, got %s", m.StorageFilter())
+	}
+
+	// Press 'p': ScopeHome -> ScopeAll
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	m = newM.(Model)
+	if m.StorageFilter() != core.StorageScopeAll {
+		t.Errorf("after 3rd 'p', expected ScopeAll, got %s", m.StorageFilter())
+	}
+
+	// Press 'P' (uppercase): ScopeAll -> ScopeRoot
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	m = newM.(Model)
+	if m.StorageFilter() != core.StorageScopeRoot {
+		t.Errorf("after uppercase 'P', expected ScopeRoot, got %s", m.StorageFilter())
+	}
+}
+
+func TestTUI_DualStorageHeaderTelemetry(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.width = 140
+	m.height = 30
+	m.storageInfo = core.SystemStorageInfo{
+		HasSeparateHome: true,
+		Root: core.MountStats{
+			Path:        "/",
+			TotalBytes:  100 * 1024 * 1024 * 1024,
+			UsedBytes:   70 * 1024 * 1024 * 1024,
+			FreeBytes:   30 * 1024 * 1024 * 1024,
+			UsedPercent: 70.0,
+		},
+		Home: core.MountStats{
+			Path:        "/home",
+			TotalBytes:  200 * 1024 * 1024 * 1024,
+			UsedBytes:   90 * 1024 * 1024 * 1024,
+			FreeBytes:   110 * 1024 * 1024 * 1024,
+			UsedPercent: 45.0,
+		},
+	}
+
+	// 1. Target: ALL
+	header := m.renderHeader()
+	if !strings.Contains(header, "Root (/):") || !strings.Contains(header, "70.0%") {
+		t.Errorf("header missing Root (/): 70.0%% metric:\n%s", header)
+	}
+	if !strings.Contains(header, "Home (/home):") || !strings.Contains(header, "45.0%") {
+		t.Errorf("header missing Home (/home): 45.0%% metric:\n%s", header)
+	}
+	if !strings.Contains(header, "[TARGET: ALL]") {
+		t.Errorf("header missing [TARGET: ALL] badge:\n%s", header)
+	}
+
+	// 2. Target: ROOT /
+	m.cycleStorageFilter()
+	headerRoot := m.renderHeader()
+	if !strings.Contains(headerRoot, "[TARGET: ROOT /]") {
+		t.Errorf("header missing [TARGET: ROOT /] badge:\n%s", headerRoot)
+	}
+
+	// 3. Target: HOME /home
+	m.cycleStorageFilter()
+	headerHome := m.renderHeader()
+	if !strings.Contains(headerHome, "[TARGET: HOME /home]") {
+		t.Errorf("header missing [TARGET: HOME /home] badge:\n%s", headerHome)
+	}
+
+	// 4. Single filesystem fallback
+	m.storageInfo.HasSeparateHome = false
+	m.storageFilter = core.StorageScopeAll
+	m.diskStats = DiskStats{
+		TotalBytes:  100 * 1024 * 1024 * 1024,
+		UsedBytes:   50 * 1024 * 1024 * 1024,
+		FreeBytes:   50 * 1024 * 1024 * 1024,
+		UsedPercent: 50.0,
+	}
+	headerSingle := m.renderHeader()
+	if !strings.Contains(headerSingle, "50.0% Used") || strings.Contains(headerSingle, "Home (/home):") {
+		t.Errorf("single filesystem should show standard Root meter without Home meter:\n%s", headerSingle)
+	}
+}
+
+func TestTUI_StoragePartitionBadgesAndRightPaneFiltering(t *testing.T) {
+	reg := core.NewRegistry()
+	cfg := core.DefaultConfig()
+
+	testMod := &mockTestModule{
+		id:       "storage_test_mod",
+		name:     "Storage Test Module",
+		category: "pkg",
+		items: []core.CleanableItem{
+			{
+				ID:          "item_root_1",
+				Name:        "Root Package Cache",
+				Path:        "/var/cache/pacman/pkg/pkg1.tar.zst",
+				Size:        100 * 1024 * 1024,
+				Safety:      core.SafetySafe,
+				Selected:    true,
+				Description: "Cached package on root",
+			},
+			{
+				ID:          "item_home_1",
+				Name:        "User Home Cache",
+				Path:        "/home/efzyn/.cache/yarn/v6/npm.tgz",
+				Size:        50 * 1024 * 1024,
+				Safety:      core.SafetySafe,
+				Selected:    true,
+				Description: "User cache on home",
+			},
+			{
+				ID:          "item_root_2",
+				Name:        "Root System Log",
+				Path:        "/var/log/journal/sys.journal",
+				Size:        200 * 1024 * 1024,
+				Safety:      core.SafetyCaution,
+				Selected:    true,
+				Description: "Journal log on root",
+			},
+		},
+	}
+	reg.Register(testMod)
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.storageInfo = core.SystemStorageInfo{
+		HasSeparateHome: true,
+		Root:            core.MountStats{Path: "/", DevID: 1},
+		Home:            core.MountStats{Path: "/home", DevID: 2},
+	}
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+	m.activeModuleIdx = 0
+
+	active := m.ActiveModule()
+	if active == nil {
+		t.Fatalf("expected active module")
+	}
+
+	// 1. StorageScopeAll: all 3 items visible, badges [/] and [~] present
+	m.SetStorageFilter(core.StorageScopeAll)
+	indicesAll := m.FilteredItemIndices(active)
+	if len(indicesAll) != 3 {
+		t.Fatalf("expected 3 items matching ScopeAll, got %d", len(indicesAll))
+	}
+	rightPaneAll := m.renderRightPane(90, 20)
+	if !strings.Contains(rightPaneAll, "STOR") {
+		t.Errorf("right pane header missing STOR column:\n%s", rightPaneAll)
+	}
+	if !strings.Contains(rightPaneAll, "[/]") {
+		t.Errorf("right pane missing [/] Root badge:\n%s", rightPaneAll)
+	}
+	if !strings.Contains(rightPaneAll, "[~]") {
+		t.Errorf("right pane missing [~] Home badge:\n%s", rightPaneAll)
+	}
+
+	// 2. StorageScopeRoot: only 2 root items visible, home item hidden
+	m.SetStorageFilter(core.StorageScopeRoot)
+	indicesRoot := m.FilteredItemIndices(active)
+	if len(indicesRoot) != 2 {
+		t.Fatalf("expected 2 items matching ScopeRoot, got %d", len(indicesRoot))
+	}
+	rightPaneRoot := m.renderRightPane(90, 20)
+	if !strings.Contains(rightPaneRoot, "Root Package Cache") || !strings.Contains(rightPaneRoot, "Root System Log") {
+		t.Errorf("right pane missing root items under ScopeRoot:\n%s", rightPaneRoot)
+	}
+	if strings.Contains(rightPaneRoot, "User Home Cache") {
+		t.Errorf("right pane should NOT contain User Home Cache under ScopeRoot:\n%s", rightPaneRoot)
+	}
+	if strings.Contains(rightPaneRoot, "[~]") {
+		t.Errorf("right pane should NOT contain [~] Home badge under ScopeRoot:\n%s", rightPaneRoot)
+	}
+	if m.ModuleFilteredBytes(active) != 300*1024*1024 {
+		t.Errorf("expected 300 MB filtered bytes on Root, got %d", m.ModuleFilteredBytes(active))
+	}
+
+	// 3. StorageScopeHome: only 1 home item visible, root items hidden
+	m.SetStorageFilter(core.StorageScopeHome)
+	indicesHome := m.FilteredItemIndices(active)
+	if len(indicesHome) != 1 {
+		t.Fatalf("expected 1 item matching ScopeHome, got %d", len(indicesHome))
+	}
+	rightPaneHome := m.renderRightPane(90, 20)
+	if !strings.Contains(rightPaneHome, "User Home Cache") {
+		t.Errorf("right pane missing User Home Cache under ScopeHome:\n%s", rightPaneHome)
+	}
+	if strings.Contains(rightPaneHome, "Root Package Cache") || strings.Contains(rightPaneHome, "Root System Log") {
+		t.Errorf("right pane should NOT contain Root items under ScopeHome:\n%s", rightPaneHome)
+	}
+	if strings.Contains(rightPaneHome, "[/]") {
+		t.Errorf("right pane should NOT contain [/] Root badge under ScopeHome:\n%s", rightPaneHome)
+	}
+	if m.ModuleFilteredBytes(active) != 50*1024*1024 {
+		t.Errorf("expected 50 MB filtered bytes on Home, got %d", m.ModuleFilteredBytes(active))
+	}
+
+	// 4. Test ToggleSelectAllGlobal with active storageFilter
+	// Set filter to Root
+	m.SetStorageFilter(core.StorageScopeRoot)
+	// Currently root items are selected=true, home item is selected=true
+	// Toggling with 'a' should deselect only root items
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m = newM.(Model)
+	active = m.ActiveModule()
+	if active.ScanRes.Items[0].Selected || active.ScanRes.Items[2].Selected {
+		t.Errorf("expected root items to be deselected after 'a' toggle")
+	}
+	if !active.ScanRes.Items[1].Selected {
+		t.Errorf("expected home item (index 1) to remain selected when toggling in ScopeRoot")
+	}
+}
+
+func TestTUI_FooterSelectionBreakdown(t *testing.T) {
+	reg := core.NewRegistry()
+	cfg := core.DefaultConfig()
+
+	testMod := &mockTestModule{
+		id:       "storage_mod",
+		name:     "Storage Module",
+		category: "pkg",
+		items: []core.CleanableItem{
+			{
+				ID:       "root_item",
+				Name:     "Root Package",
+				Path:     "/var/cache/pacman/pkg/p.tar.zst",
+				Size:     200 * 1024 * 1024,
+				Safety:   core.SafetySafe,
+				Selected: true,
+			},
+			{
+				ID:       "home_item",
+				Name:     "Home Cache",
+				Path:     "/home/efzyn/.cache/npm/tar.tgz",
+				Size:     300 * 1024 * 1024,
+				Safety:   core.SafetySafe,
+				Selected: true,
+			},
+		},
+	}
+	reg.Register(testMod)
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.width = 140
+	m.height = 30
+	m.storageInfo = core.SystemStorageInfo{
+		HasSeparateHome: true,
+		Root:            core.MountStats{Path: "/", DevID: 1},
+		Home:            core.MountStats{Path: "/home", DevID: 2},
+	}
+	results, _ := reg.ScanAll(context.Background())
+	newM, _ := m.Update(msgScanResult{results: results})
+	m = newM.(Model)
+
+	homeSel, rootSel := m.SelectedStorageBytes()
+	if homeSel != 300*1024*1024 {
+		t.Errorf("expected homeSelectedBytes=300MB, got %d", homeSel)
+	}
+	if rootSel != 200*1024*1024 {
+		t.Errorf("expected rootSelectedBytes=200MB, got %d", rootSel)
+	}
+
+	footer := m.renderFooter()
+	if !strings.Contains(footer, "Selected: 500.00 MB") {
+		t.Errorf("footer missing 'Selected: 500.00 MB':\n%s", footer)
+	}
+	if !strings.Contains(footer, "Home: 300.00 MB") || !strings.Contains(footer, "Root: 200.00 MB") {
+		t.Errorf("footer missing '(Home: 300.00 MB • Root: 200.00 MB)':\n%s", footer)
+	}
+	if !strings.Contains(footer, "storage target") {
+		t.Errorf("footer missing 'storage target' legend:\n%s", footer)
+	}
+}
+
+func TestTUI_StrictViewportHeight_DualStorage(t *testing.T) {
+	reg, _, _ := setupTestRegistry()
+	cfg := core.DefaultConfig()
+
+	m := NewModel(context.Background(), reg, cfg)
+	m.storageInfo = core.SystemStorageInfo{
+		HasSeparateHome: true,
+		Root: core.MountStats{
+			Path:        "/",
+			TotalBytes:  100 * 1024 * 1024 * 1024,
+			UsedBytes:   70 * 1024 * 1024 * 1024,
+			FreeBytes:   30 * 1024 * 1024 * 1024,
+			UsedPercent: 70.0,
+		},
+		Home: core.MountStats{
+			Path:        "/home",
+			TotalBytes:  200 * 1024 * 1024 * 1024,
+			UsedBytes:   90 * 1024 * 1024 * 1024,
+			FreeBytes:   110 * 1024 * 1024 * 1024,
+			UsedPercent: 45.0,
+		},
+	}
+
+	viewModes := []ViewMode{
+		ViewModeMain,
+		ViewModeModal,
+		ViewModeAbout,
+		ViewModeCustomRuleForm,
+		ViewModeExecuting,
+		ViewModeDone,
+	}
+
+	dimensions := [][2]int{
+		{60, 20},
+		{80, 24},
+		{100, 26},
+		{120, 30},
+		{140, 35},
+	}
+
+	for _, mode := range viewModes {
+		m.viewMode = mode
+		if mode == ViewModeCustomRuleForm {
+			m.initCustomRuleForm()
+		}
+		for _, dim := range dimensions {
+			w, h := dim[0], dim[1]
+			m.width = w
+			m.height = h
+			view := m.View()
+			renderedH := lipgloss.Height(view)
+			if renderedH > h {
+				t.Errorf("mode %v dim %dx%d: rendered height %d exceeds max height %d", mode, w, h, renderedH, h)
+			}
+		}
 	}
 }

@@ -3,7 +3,7 @@
 - **Date:** 2026-11-03
 - **Auditor:** Sentry (QA Engineer & Code Reviewer)
 - **Target Repository:** `/home/efzyn/Project/sweep`
-- **Git Commit:** `81e3892` (previously `6d60f48`)
+- **Git Commit:** `ccdd9f3` (previously `81e3892`)
 - **Target Go Version:** Go 1.23+ (Platform: `Linux 7.2.7-1-cachyos x86_64`)
 - **Status / Gate:** **APPROVED (PASSED ALL QUALITY & SECURITY GATES)**
 
@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary
 
-A comprehensive quality assurance and security audit was conducted on Sweep, focusing on privilege elevation boundaries, read-only scanning safety, dry-run simulation accuracy, Snapper safeguard snapshot generation, concurrency safety, TUI viewport height clamping & header visibility, and Phase 2 advanced subsystem adapters (Developer Caches, Desktop & Browser Caches, Systemd Journal Logs, and Multi-Distro Package Managers: APT, DNF, Snap).
+A comprehensive quality assurance and security audit was conducted on Sweep, focusing on privilege elevation boundaries, read-only scanning safety, dry-run simulation accuracy, Snapper safeguard snapshot generation, concurrency safety, TUI viewport height clamping & header visibility, Phase 2 advanced subsystem adapters (Developer Caches, Desktop & Browser Caches, Systemd Journal Logs, and Multi-Distro Package Managers: APT, DNF, Snap), `SUDO_USER` resolution with user home directory preservation, Snapper unprivileged diagnostics & root scanning, in-app custom path rule creation (`[n]` modal form), and context-aware empty state presentation in the Nordic Minimalist TUI.
 
 ### Summary Scorecard
 | Quality / Security Gate | Target Requirement | Audit Result | Status |
@@ -19,8 +19,15 @@ A comprehensive quality assurance and security audit was conducted on Sweep, foc
 | **Privilege Escalation in Scan** | Zero `sudo`/`pkexec` during scan | 0 elevation calls; strictly read-only non-root scan | **PASS** |
 | **Command Injection Safety** | Zero `sh -c` / `bash -c` string formatting | 100% parameterized `exec.CommandContext(ctx, name, args...)` | **PASS** |
 | **Elevation Contract (`RequiresElevation`)** | True only for root operations | pacman, apt, dnf, snapper, snap, journal = true; docker, flatpak, devcache, usercache, custom = false | **PASS** |
+| **Sudo Home Resolution (`GetUserHomeDir`)** | Honor `SUDO_USER` under root/sudo | Resolves real interactive user home (`/home/<user>`); preserves user caches & config | **PASS** |
+| **Sudo Config Preservation** | Never clobber or alter user's config | User's `~/.config/sweep/config.yaml` 100% preserved; chown to `SUDO_USER` on save | **PASS** |
+| **Snapper Permission Diagnostics** | Informative empty state on permission denied | Returns structured hint directing to `sudo sweep` / config; 0 blank screen crashes | **PASS** |
+| **Snapper Root Elevation Scan** | Full snapshot scanning when running as root | Discovers and classifies snapshots by age; enforces snapshot 0 protection | **PASS** |
+| **In-App Custom Path Form (`[n]`)** | Interactive modal form with full keyboard flow | 6-step form cycling (Tab/Shift+Tab), Space toggles, input validation, atomic save | **PASS** |
+| **Custom Rule Immediate Auto-Rescan**| Trigger auto-rescan on rule add/delete | Immediate `scanningAll` and `refreshDiskStatsCmd` execution upon save or delete | **PASS** |
+| **Context-Aware Empty States** | Informative right-pane guidance for empty modules | Custom rule creation hints (`[n]`), Snapper root instructions, clean system praise | **PASS** |
 | **Snapper Safeguard Snapshot** | Pre-clean snapshot created before destructive clean | Verified; triggers pre-clean snapshot; protects snapshot 0 | **PASS** |
-| **Dry-Run Accuracy & Safety** | Zero file deletions; exact byte/count equivalence | 38 items (15.25 GB) scanned == 15.25 GB simulated; 0 deletions | **PASS** |
+| **Dry-Run Accuracy & Safety** | Zero file deletions; exact byte/count equivalence | 38 items (15.68 GB) scanned == 15.68 GB simulated; 0 deletions | **PASS** |
 | **Concurrency & Race Detection** | `go test -race ./...` | 0 race conditions detected across all 11 packages | **PASS** |
 | **Go Static Analysis & Lint** | `go vet ./...` & `gofmt -s -l .` | Clean output; 0 errors or formatting discrepancies | **PASS** |
 | **End-to-End Integration Suite** | Scanner -> Registry -> Selection -> Dry-Run -> Clean | Comprehensive suite in `internal/core/integration_test.go` | **PASS** |
@@ -459,18 +466,89 @@ Comprehensive end-to-end integration tests were authored and validated:
   - **Outcome:** Clean; 0 warnings, 0 errors, 100% compliant formatting.
 - **Production Build (`make build`):**
   - Compiled `bin/sweep` with version metadata:
-    `sweep version 81e3892-dirty (commit: 81e3892, built: 2026-11-03T09:15:53Z)`
+    `sweep version ccdd9f3-dirty (commit: ccdd9f3, built: 2026-11-03T11:47:57Z)`
 
 ---
 
-## 11. Audit Verdict
+## 11. Sudo User Home Resolution, Snapper Elevation & In-App Custom Path Form Audit (Task t_04b62c9b)
 
-All acceptance criteria for Phase 2 QA & Security Audit (Task `t_058228eb`) and preceding tasks (`t_052543e2`, `t_590217e6`, `t_295636f4`, `t_fb1dfbd7`, `t_973fdd27`) have been fully satisfied and empirically verified. Sweep demonstrates:
-1. Complete Phase 2 multi-distro and advanced cache support covering all 6 subsystem categories (Package Managers, Containers, Dev Caches, System & Desktop, Filesystem, Custom Rules).
-2. Strict non-root scanning across all user caches, with zero privilege escalation during scanning and explicit `RequiresElevation()` declarations.
-3. Guaranteed browser user data preservation (`places.sqlite`, `Bookmarks`, `Cookies`, `key4.db`) and active profile lock protection.
-4. Exact dry-run simulation accuracy (15.25 GB scanned == 15.25 GB simulated, 0 files modified).
-5. 100% race-free concurrency under `go test -race ./...`, clean static analysis (`go vet`, `gofmt`), and clean release binary compilation (`bin/sweep`).
+### 11.1 Sudo Elevation & User Home Audit
+A security and configuration persistence audit was conducted to verify that Sweep correctly resolves user home paths and configuration files when executed with elevated privileges (`sudo sweep`):
+1. **Interactive User Resolution (`core.GetUserHomeDir`):**
+   - When running as root (`uid == 0`), `GetUserHomeDir()` inspects the `SUDO_USER` environment variable.
+   - If set to an interactive non-root username (e.g. `efzyn` or `alice`), it calls `os/user.Lookup(sudoUser)` to obtain the real user's home directory (`/home/<user>`), with a robust fallback to `/home/<sudoUser>`.
+   - Verified via `TestGetUserHomeDir_StandardUser` and `TestGetUserHomeDir_SudoUserSimulation`.
+2. **Canonical Config Resolution (`core.DefaultConfigPath`):**
+   - Resolves to `/home/<SUDO_USER>/.config/sweep/config.yaml` rather than `/root/.config/sweep/config.yaml`.
+   - Guarantees that running `sudo sweep` targets and loads the user's customized settings and custom scan rules.
+3. **Non-Clobbering Invariant (`TestLoadConfig_DoesNotClobberExistingConfigUnderSudo`):**
+   - Verified that when user configuration already exists, executing `LoadConfig("")` under `sudo` reads the user file directly and does NOT overwrite or reset it to defaults.
+4. **Permissions & Ownership Safeguard (`core.ChownToSudoUser` & `TestSaveConfig_SudoUserOwnershipAndPermissions`):**
+   - When `SaveConfig` or `SaveDefaultConfig` creates or updates configuration files under root, files are written with explicit `0644` permissions and both directory and file ownership are automatically transferred (`chown`) to the resolved `SUDO_USER` UID/GID.
+   - Prevents permission lockouts where the standard unprivileged user is unable to read or modify `~/.config/sweep/config.yaml` after running `sudo sweep`.
+
+### 11.2 Snapper Status & Empty States Audit
+1. **Unprivileged Diagnostics (`TestSnapperModule_PermissionDiagnostics`):**
+   - When running without root privileges on a Snapper-enabled Btrfs host, unprivileged execution captures "No permissions" gracefully.
+   - Rather than returning a blank screen or failing fatally, `Scan()` sets `result.Metadata["permission_denied"] = SnapperPermissionDeniedMessage`.
+2. **Elevated Root Scanning (`TestSnapperModule_PrivilegedRootScanSucceeds`):**
+   - Verified that running with elevated privileges parses Snapper CSV output, discovers configured subvolumes (`root`, `home`), and classifies snapshots by age.
+   - Snapshot `0` (the active subvolume) and snapshots `< 3 days` are strictly protected and marked `SafetyHigh` / non-selected.
+3. **Nordic TUI Informative Guidance (`TestTUI_EmptyStates_ContextAware`):**
+   - When Snapper is inaccessible due to unprivileged permissions, the TUI right pane renders:
+     ```text
+     Snapper memerlukan izin root untuk membaca daftar snapshot.
+     Petunjuk: Jalankan 'sudo sweep' untuk memindai snapshot, atau tambahkan user ke /etc/snapper/configs/root.
+     Catatan: Snapshot aktif (#0) dan snapshot < 3 hari otomatis dilindungi demi keamanan.
+     ```
+   - Eliminates user confusion and provides clear actionable remediation.
+
+### 11.3 In-App Custom Path Modal Form Verification
+1. **Interactive Modal Form (`[n]` / `ViewModeCustomRuleForm`):**
+   - When viewing the `custom` module, pressing `[n]` opens the 6-field interactive modal form:
+     * Field 0: **Nama Aturan** (text input)
+     * Field 1: **Path Direktori** (text input with `~` expansion support)
+     * Field 2: **Filter Pola (Glob)** (default `*` or `*.tmp`)
+     * Field 3: **Pindai Rekursif** (Space toggle: `[x] Ya` / `[ ] Tidak`)
+     * Field 4: **Tingkat Bahaya** (Space cycle: `SAFE` -> `CAUTION` -> `HIGH` -> `SAFE`)
+     * Field 5: **[ SIMPAN & PINDAI ]** (Submit action)
+2. **Keyboard Navigation & Validation (`tui_test.go`):**
+   - `TestTUI_CustomRuleForm_OpenAndCancel`: Tests opening with `n` and dismissing with `Esc`.
+   - `TestTUI_CustomRuleForm_CyclingAndToggles`: Tests `Tab`/`Down` and `Shift+Tab`/`Up` wrapping, and Space toggling.
+   - `TestTUI_CustomRuleForm_Validation`: Tests required field validation errors (`Nama aturan tidak boleh kosong`, `Path direktori tidak boleh kosong`).
+   - `TestTUI_CustomRuleForm_SubmitAndPersist`: Tests rule submission, atomic persistence to `~/.config/sweep/config.yaml`, and immediate auto-rescan trigger (`m.scanningAll = true`).
+   - `TestTUI_CustomRule_Delete`: Tests highlighting an item in Custom module and pressing `[x]` to delete the associated rule and auto-rescan.
+   - `TestTUI_CustomRuleForm_ViewportHeightClamping`: Asserts strict invariant `lipgloss.Height(view) <= m.height` across viewport heights 16, 20, 24, 30, and 40 rows.
+
+### 11.4 Context-Aware Empty State Presentation Audit
+All modules were audited for informative empty state presentation:
+- **Custom Paths Module:**
+  * When no rules are configured: prompts with bold explanation and `Tekan [n] untuk menambah aturan path kustom baru langsung dari sini.`
+  * When rules exist but no files match: informs that active rules had no matches and prompts `[n]`.
+- **Snapper Snapshots Module:**
+  * When unprivileged: prompts with root requirement and `sudo sweep` guidance.
+  * When privileged and clean: confirms system is clean and notes active snapshot #0 safety.
+- **Package Managers & Clean Modules:**
+  * Displays Nordic success message: `Sistem Anda bersih! Tidak ditemukan item yang memenuhi kriteria pembersihan untuk modul ini.`
+
+### 11.5 Automated Test Suite & Concurrency Verification
+- `go test -v -race ./...`:
+  * All 11 packages and integration suites executed.
+  * **Result:** **0 race conditions detected**, 100% test pass.
+- `go vet ./...`: Clean output (0 warnings).
+- `gofmt -s -l .`: Clean output (0 discrepancies).
+- `make build`: Successfully compiled `bin/sweep` binary.
+
+---
+
+## 12. Audit Verdict
+
+All acceptance criteria for Task `t_04b62c9b` (QA & Verification: Sudo User Home Resolution, Snapper Elevation & In-App Custom Path Form) and preceding tasks (`t_ab936a14`, `t_058228eb`, `t_fb1dfbd7`, `t_295636f4`, `t_590217e6`, `t_052543e2`) have been fully satisfied and empirically verified. Sweep demonstrates:
+1. Rock-solid `SUDO_USER` home directory resolution preventing config clobbering, preserving user caches, and automatically maintaining unprivileged file ownership upon sudo execution.
+2. Informative Snapper permission diagnostics and clear elevated execution instructions without blank screens or crashes.
+3. Fully functional in-app custom path rule creation modal (`[n]`) and rule deletion (`[x]`) with input validation, atomic persistence to `~/.config/sweep/config.yaml`, and immediate auto-rescan.
+4. Context-aware informative empty states across all modules in compliance with the Nordic Minimalist TUI design.
+5. 100% clean static analysis (`go vet`, `gofmt`), zero race conditions under `go test -race ./...`, and production binary compiled at `bin/sweep`.
 
 **Signed off by:**
 Sentry (QA Engineer & Code Reviewer)

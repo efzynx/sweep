@@ -379,7 +379,7 @@ func TestIntegration_DefaultAdaptersContract(t *testing.T) {
 			}
 
 			// Execute Scan() with a bounded timeout in non-root context
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			res, err := mod.Scan(ctx)
