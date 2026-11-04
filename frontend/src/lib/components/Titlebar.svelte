@@ -18,6 +18,12 @@
     onRefresh?: () => void;
     onOpenSettings?: () => void;
   } = $props();
+
+  const cleanVersion = $derived.by(() => {
+    const raw = (appVersion || '').trim();
+    if (!raw) return '1.0.0-beta';
+    return raw.replace(/^v+/i, '');
+  });
 </script>
 
 <div
@@ -32,7 +38,7 @@
       <IconSweep size={14} />
     </div>
     <span class="text-[13px] font-bold text-white tracking-wider">SWEEP</span>
-    <span class="text-[11px] font-mono text-nordic-text-muted">v{appVersion}</span>
+    <span class="text-[11px] font-mono text-nordic-text-muted">v{cleanVersion}</span>
     <span
       class="px-2 py-0.5 rounded text-[11px] font-semibold bg-nordic-purple-dim text-nordic-purple border border-nordic-purple/30"
     >
