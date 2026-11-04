@@ -13,7 +13,7 @@ DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 SHAREDIR ?= /usr/share
 
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "1.0.1-beta")
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "1.0.0")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 

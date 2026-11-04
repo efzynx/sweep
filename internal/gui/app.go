@@ -50,7 +50,7 @@ type App struct {
 // NewApp creates a new uninitialized App instance.
 func NewApp() *App {
 	return &App{
-		version: "1.0.1-beta",
+		version: "1.0.0",
 	}
 }
 
@@ -68,7 +68,7 @@ func (a *App) GetAppVersion() string {
 	if a.version != "" {
 		return a.version
 	}
-	return "1.0.1-beta"
+	return "1.0.0"
 }
 
 // NewAppWithDependencies creates a new App instance pre-populated with a registry and config.
