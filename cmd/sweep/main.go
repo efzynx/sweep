@@ -19,7 +19,7 @@ import (
 
 var (
 	// Version metadata populated at build time via ldflags.
-	Version   = "1.0.0-beta"
+	Version   = "1.0.1-beta"
 	Commit    = "none"
 	BuildDate = "unknown"
 )
