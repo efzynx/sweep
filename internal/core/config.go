@@ -355,23 +355,11 @@ func (c *Config) syncFields() {
 		c.Retention.DevCacheIdleDays = 30
 	}
 
-	// Sync DryRunDefault
-	if !c.DryRunDefault && c.General.DryRunDefault {
-		c.General.DryRunDefault = false
-	} else if !c.General.DryRunDefault && c.DryRunDefault {
-		c.DryRunDefault = false
-	} else {
-		c.DryRunDefault = c.General.DryRunDefault
-	}
+	// Sync DryRunDefault: General is authoritative; mirror to legacy top-level field
+	c.DryRunDefault = c.General.DryRunDefault
 
-	// Sync SnapshotSafeguard
-	if !c.SnapshotSafeguard && c.General.SnapshotSafeguard {
-		c.General.SnapshotSafeguard = false
-	} else if !c.General.SnapshotSafeguard && c.SnapshotSafeguard {
-		c.SnapshotSafeguard = false
-	} else {
-		c.SnapshotSafeguard = c.General.SnapshotSafeguard
-	}
+	// Sync SnapshotSafeguard: General is authoritative; mirror to legacy top-level field
+	c.SnapshotSafeguard = c.General.SnapshotSafeguard
 }
 
 type rawConfig struct {

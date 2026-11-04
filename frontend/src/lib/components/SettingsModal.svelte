@@ -26,9 +26,9 @@
   let saving = $state(false);
   let saveSuccess = $state(false);
 
-  // Sync state when config prop updates
+  // Sync state when modal opens or config prop updates
   $effect(() => {
-    if (config) {
+    if (isOpen && config) {
       dryRunDefault = !!config.general?.dry_run_default;
       snapshotSafeguard = config.general?.snapshot_safeguard ?? true;
       logLevel = config.general?.log_level || 'info';
@@ -105,29 +105,51 @@
             General Policies
           </div>
 
-          <label class="flex items-center justify-between p-3 rounded-lg bg-[#0c121d] border border-nordic-border/60 cursor-pointer hover:border-nordic-cyan/40 transition-colors">
+          <!-- Default to Dry-Run Mode Toggle -->
+          <div
+            class="flex items-center justify-between p-3 rounded-lg bg-[#0c121d] border border-nordic-border/60 cursor-pointer hover:border-nordic-cyan/40 transition-colors select-none"
+            onclick={() => (dryRunDefault = !dryRunDefault)}
+            role="button"
+            tabindex="0"
+            onkeydown={(e) => e.key === 'Enter' && (dryRunDefault = !dryRunDefault)}
+          >
             <div class="flex flex-col gap-0.5">
               <span class="text-xs font-semibold text-slate-200">Default to Dry-Run Mode</span>
               <span class="text-[11px] text-nordic-text-muted">Simulate clean operations without modifying disk by default</span>
             </div>
-            <input
-              type="checkbox"
-              bind:checked={dryRunDefault}
-              class="w-4 h-4 rounded bg-[#162030] border-nordic-border text-nordic-cyan focus:ring-0 cursor-pointer"
-            />
-          </label>
+            <div
+              class="w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 {dryRunDefault
+                ? 'bg-nordic-cyan border-nordic-cyan text-[#041017]'
+                : 'bg-[#0f172a] border-[#334155]'}"
+            >
+              {#if dryRunDefault}
+                <IconCheck size={11} />
+              {/if}
+            </div>
+          </div>
 
-          <label class="flex items-center justify-between p-3 rounded-lg bg-[#0c121d] border border-nordic-border/60 cursor-pointer hover:border-nordic-cyan/40 transition-colors">
+          <!-- Snapper Safeguard Snapshots Toggle -->
+          <div
+            class="flex items-center justify-between p-3 rounded-lg bg-[#0c121d] border border-nordic-border/60 cursor-pointer hover:border-nordic-cyan/40 transition-colors select-none"
+            onclick={() => (snapshotSafeguard = !snapshotSafeguard)}
+            role="button"
+            tabindex="0"
+            onkeydown={(e) => e.key === 'Enter' && (snapshotSafeguard = !snapshotSafeguard)}
+          >
             <div class="flex flex-col gap-0.5">
               <span class="text-xs font-semibold text-slate-200">Snapper Safeguard Snapshots</span>
               <span class="text-[11px] text-nordic-text-muted">Create automated snapshot before executing destructive clean</span>
             </div>
-            <input
-              type="checkbox"
-              bind:checked={snapshotSafeguard}
-              class="w-4 h-4 rounded bg-[#162030] border-nordic-border text-nordic-cyan focus:ring-0 cursor-pointer"
-            />
-          </label>
+            <div
+              class="w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 {snapshotSafeguard
+                ? 'bg-nordic-cyan border-nordic-cyan text-[#041017]'
+                : 'bg-[#0f172a] border-[#334155]'}"
+            >
+              {#if snapshotSafeguard}
+                <IconCheck size={11} />
+              {/if}
+            </div>
+          </div>
 
           <div class="flex items-center justify-between p-3 rounded-lg bg-[#0c121d] border border-nordic-border/60">
             <div class="flex flex-col gap-0.5">
