@@ -267,7 +267,7 @@ export const api = {
     if (isWailsRuntime() && (window as any).go?.gui?.App?.GetAppVersion) {
       return (window as any).go.gui.App.GetAppVersion();
     }
-    return Promise.resolve('1.0.0-beta');
+    return Promise.resolve('1.0.1-beta');
   },
 
   async getModules(): Promise<ModuleSummary[]> {

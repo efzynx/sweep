@@ -33,7 +33,7 @@
   let scanning = $state<boolean>(false);
   let safeguardActive = $state<boolean>(true);
   let appConfig = $state<AppConfig | null>(null);
-  let appVersion = $state<string>('1.0.0-beta');
+  let appVersion = $state<string>('1.0.1-beta');
 
   // Modals state
   let isCustomModalOpen = $state<boolean>(false);

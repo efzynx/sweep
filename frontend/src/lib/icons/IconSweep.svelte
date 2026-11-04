@@ -13,21 +13,16 @@
   stroke-linejoin="round"
   class={className}
 >
-  <!-- Handle -->
-  <path d="M18 3L9.5 11.5" />
-  <!-- Ferrule collar -->
-  <path d="M7 14L10 17" stroke-width="2.5" />
-  <!-- Bristle head fan -->
-  <path
-    d="M7 14C5 15.5 3 18 3 20C3 20.6 3.4 21 4 21C6 21 8.5 19 10 17Z"
-    fill="currentColor"
-    fill-opacity="0.2"
-  />
-  <!-- Bristle details -->
-  <path d="M5.5 17.5L4 20" stroke-width="1.5" />
-  <path d="M7.5 18.5L6.5 20.5" stroke-width="1.5" />
-  <!-- Clean spark stars & particles -->
-  <path d="M4 4L4.5 5.5L6 6L4.5 6.5L4 8L3.5 6.5L2 6L3.5 5.5Z" fill="currentColor" stroke="none" />
-  <circle cx="19" cy="15" r="1.5" fill="currentColor" stroke="none" />
-  <circle cx="16" cy="19" r="1" fill="currentColor" stroke="none" />
+  <!-- Terminal Prompt Chevron ('>') -->
+  <path d="M5 6L11 12L5 18" stroke-width="2.5" />
+  <!-- Vacuum Clean Beam Rays -->
+  <line x1="12" y1="12" x2="20" y2="12" stroke-width="2" />
+  <line x1="12.5" y1="9" x2="18.5" y2="7" stroke-width="1.5" opacity="0.75" />
+  <line x1="12.5" y1="15" x2="18.5" y2="17" stroke-width="1.5" opacity="0.75" />
+  <!-- Disintegrated Bits -->
+  <rect x="19" y="6" width="1.5" height="1.5" rx="0.5" fill="currentColor" stroke="none" />
+  <rect x="20" y="11.25" width="1.5" height="1.5" rx="0.5" fill="currentColor" stroke="none" />
+  <rect x="19" y="16.5" width="1.5" height="1.5" rx="0.5" fill="currentColor" stroke="none" />
+  <!-- Clean Starburst -->
+  <path d="M10 3.5L10.5 4.5L11.5 5L10.5 5.5L10 6.5L9.5 5.5L8.5 5L9.5 4.5Z" fill="currentColor" stroke="none" />
 </svg>

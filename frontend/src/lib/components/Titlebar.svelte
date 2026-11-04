@@ -5,7 +5,7 @@
 
   let {
     distro,
-    appVersion = '1.0.0-beta',
+    appVersion = '1.0.1-beta',
     safeguardActive = true,
     scanning = false,
     onRefresh = () => {},
@@ -21,7 +21,7 @@
 
   const cleanVersion = $derived.by(() => {
     const raw = (appVersion || '').trim();
-    if (!raw) return '1.0.0-beta';
+    if (!raw) return '1.0.1-beta';
     return raw.replace(/^v+/i, '');
   });
 </script>
