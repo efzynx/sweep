@@ -12,6 +12,7 @@ import (
 	"github.com/efzynx/sweep/internal/adapters/snap"
 	"github.com/efzynx/sweep/internal/adapters/snapper"
 	"github.com/efzynx/sweep/internal/adapters/usercache"
+	"github.com/efzynx/sweep/internal/adapters/zypper"
 	"github.com/efzynx/sweep/internal/core"
 )
 
@@ -29,6 +30,7 @@ func RegisterDefaultAdapters(r *core.Registry) {
 		snapper.New(),
 		apt.New(),
 		dnf.New(),
+		zypper.New(),
 		custom.New(),
 		devcache.New(),
 		snap.New(),

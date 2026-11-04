@@ -348,6 +348,7 @@ func TestIntegration_DefaultAdaptersContract(t *testing.T) {
 		"pacman":    true,
 		"apt":       true,
 		"dnf":       true,
+		"zypper":    true,
 		"snapper":   true,
 		"docker":    false,
 		"flatpak":   false,

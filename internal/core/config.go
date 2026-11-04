@@ -267,6 +267,8 @@ func DefaultConfig() *Config {
 			"snapper":   {Enabled: true},
 			"apt":       {Enabled: true},
 			"dnf":       {Enabled: true},
+			"zypper":    {Enabled: true},
+			"snap":      {Enabled: true},
 			"custom":    {Enabled: true},
 			"usercache": {Enabled: true},
 			"journal":   {Enabled: true},

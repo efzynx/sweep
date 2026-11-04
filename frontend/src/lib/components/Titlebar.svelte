@@ -5,12 +5,14 @@
 
   let {
     distro,
+    appVersion = '1.0.0-beta',
     safeguardActive = true,
     scanning = false,
     onRefresh = () => {},
     onOpenSettings = () => {},
   }: {
     distro?: DistroInfo | null;
+    appVersion?: string;
     safeguardActive?: boolean;
     scanning?: boolean;
     onRefresh?: () => void;
@@ -30,7 +32,7 @@
       <IconSweep size={14} />
     </div>
     <span class="text-[13px] font-bold text-white tracking-wider">SWEEP</span>
-    <span class="text-[11px] font-mono text-nordic-text-muted">v1.0.0</span>
+    <span class="text-[11px] font-mono text-nordic-text-muted">v{appVersion}</span>
     <span
       class="px-2 py-0.5 rounded text-[11px] font-semibold bg-nordic-purple-dim text-nordic-purple border border-nordic-purple/30"
     >

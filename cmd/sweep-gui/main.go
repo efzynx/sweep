@@ -13,11 +13,18 @@ import (
 	"github.com/efzynx/sweep/internal/gui"
 )
 
+var (
+	Version   = "1.0.0-beta"
+	Commit    = "none"
+	BuildDate = "unknown"
+)
+
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
 	app := gui.NewApp()
+	app.SetVersion(Version)
 
 	err := wails.Run(&options.App{
 		Title:     "Sweep",
