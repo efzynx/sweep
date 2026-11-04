@@ -43,6 +43,7 @@ Sweep features a **Nordic Minimalist** Terminal User Interface (TUI) inspired by
   * Flatpak: unused runtimes (`flatpak list --unused`) and application cache directories (`~/.var/app/*/cache`).
   * Debian / Ubuntu: APT archive cache (`clean` / `autoclean`) and orphan packages (`autoremove`).
   * Fedora / RHEL: DNF cache (`clean all`) and old inactive kernels.
+  * openSUSE / SUSE: Zypper package cache (`clean --all`) and unneeded packages (`packages --unneeded`).
   * Snap: disabled and superseded package revisions (`snap list --all`).
 * **Containers & Virtualization (`docker`):**
   * Exited / stopped containers.
@@ -210,7 +211,7 @@ Sweep follows a decoupled, modular adapter architecture:
 ┌──────────────────────────────┴──────────────────────────────┐
 │ Modular Subsystem Adapters (internal/adapters)              │
 │  - pacman, docker, flatpak, snapper, devcache, usercache,   │
-│    journal, custom, apt, dnf, snap                          │
+│    journal, custom, apt, dnf, zypper, snap                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 

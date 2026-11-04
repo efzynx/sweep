@@ -33,6 +33,7 @@
   let scanning = $state<boolean>(false);
   let safeguardActive = $state<boolean>(true);
   let appConfig = $state<AppConfig | null>(null);
+  let appVersion = $state<string>('1.0.0-beta');
 
   // Modals state
   let isCustomModalOpen = $state<boolean>(false);
@@ -102,17 +103,21 @@
   async function loadData() {
     scanning = true;
     try {
-      const [storageData, distroData, modulesData, configData] = await Promise.all([
+      const [storageData, distroData, modulesData, configData, versionData] = await Promise.all([
         api.getStorageInfo(),
         api.getDistroInfo(),
         api.getModules(),
         api.getConfig(),
+        api.getAppVersion(),
       ]);
 
       storage = storageData;
       distro = distroData;
       modules = modulesData;
       appConfig = configData;
+      if (versionData) {
+        appVersion = versionData;
+      }
 
       if (!activeModuleId && modulesData.length > 0) {
         activeModuleId = modulesData[0].id;
@@ -383,6 +388,7 @@
   <!-- Titlebar -->
   <Titlebar
     {distro}
+    {appVersion}
     {safeguardActive}
     {scanning}
     onRefresh={loadData}

@@ -59,6 +59,33 @@ const mockModules: ModuleSummary[] = [
     enabled: true,
   },
   {
+    id: 'apt',
+    name: 'APT Package Cache',
+    category: 'Package Managers',
+    description: 'Debian/Ubuntu package cache and unneeded dependencies',
+    available: false,
+    requires_elevation: true,
+    enabled: true,
+  },
+  {
+    id: 'dnf',
+    name: 'DNF Package Cache',
+    category: 'Package Managers',
+    description: 'Fedora/RHEL package cache and old kernels',
+    available: false,
+    requires_elevation: true,
+    enabled: true,
+  },
+  {
+    id: 'zypper',
+    name: 'Zypper Package Cache',
+    category: 'Package Managers',
+    description: 'openSUSE package cache and unneeded packages',
+    available: false,
+    requires_elevation: true,
+    enabled: true,
+  },
+  {
     id: 'flatpak',
     name: 'Flatpak Packages',
     category: 'Package Managers',
@@ -234,6 +261,13 @@ export const api = {
       return (window as any).go.gui.App.GetDistroInfo();
     }
     return Promise.resolve(mockDistro);
+  },
+
+  async getAppVersion(): Promise<string> {
+    if (isWailsRuntime() && (window as any).go?.gui?.App?.GetAppVersion) {
+      return (window as any).go.gui.App.GetAppVersion();
+    }
+    return Promise.resolve('1.0.0-beta');
   },
 
   async getModules(): Promise<ModuleSummary[]> {

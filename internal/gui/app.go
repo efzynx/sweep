@@ -43,12 +43,32 @@ type App struct {
 	reg         *core.Registry
 	cfg         *core.Config
 	storageInfo core.SystemStorageInfo
+	version     string
 	mu          sync.RWMutex
 }
 
 // NewApp creates a new uninitialized App instance.
 func NewApp() *App {
-	return &App{}
+	return &App{
+		version: "1.0.0-beta",
+	}
+}
+
+// SetVersion sets the app version string displayed in the UI.
+func (a *App) SetVersion(v string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.version = v
+}
+
+// GetAppVersion returns the application release version.
+func (a *App) GetAppVersion() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.version != "" {
+		return a.version
+	}
+	return "1.0.0-beta"
 }
 
 // NewAppWithDependencies creates a new App instance pre-populated with a registry and config.
